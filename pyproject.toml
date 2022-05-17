@@ -19,4 +19,5 @@ test = [
 	"pytest>=7.1.2",
     "pytest-mock",
     "pytest-cov",
+    "codecov",
 ]
