@@ -1,0 +1,20 @@
+[build-system]
+requires = ["flit_core >=3.2,<4"]
+build-backend = "flit_core.buildapi"
+
+[project]
+name = "sjtrade"
+authors = [{name = "yvictor", email = "yvictor3141@gmail.com"}]
+readme = "README.md"
+dynamic = ["version", "description"]
+
+
+[project.urls]
+Home = "https://github.com/Yvictor/sjtrade"
+
+
+[project.optional-dependencies]
+test = [
+    "black",
+	"pytest>=7.1.2",
+]
