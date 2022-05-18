@@ -1,10 +1,18 @@
+import pytest
+import shioaji as sj
 
 from sjtrade.trader import SJTrader
 
-def test_sjtrader():
-    sjtrader = SJTrader()
+
+@pytest.fixture
+def sjtrader(api: sj.Shioaji) -> SJTrader:
+    return SJTrader(api)
 
 
-def test_sjtrader_start():
-    sjtrader = SJTrader()
+def test_sjtrader(api: sj.Shioaji):
+    sjtrader = SJTrader(api)
+    assert hasattr(sjtrader, "api")
+
+
+def test_sjtrader_start(sjtrader: SJTrader):
     sjtrader.start()
