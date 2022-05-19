@@ -2,12 +2,14 @@ import math
 
 
 def price_ceil(price: float) -> float:
-    if price < 10:
-        return math.ceil(price * 100) / 100.0
-    elif price < 50:
-        return math.ceil()
-    elif price < 100:
-        return math.ceil(price * 10) / 10.0
+    logp = math.floor(math.log10(price))
+    quinary = ((price / 10**logp) // 5) if logp >= 1 else 1
+    n = min(10 ** (3 - logp - quinary), 100)
+    return round(math.ceil(price * n + (5 - (price * n % 5)) * (1 - quinary)) / n, 2)
+
 
 def price_floor(price: float) -> float:
-    return 0
+    logp = math.floor(math.log10(price))
+    quinary = ((price / 10**logp) // 5) if logp >= 1 else 1
+    n = min(10 ** (3 - logp - quinary), 100)
+    return round(math.floor(price * n - ((price * n % 5) * (1 - quinary))) / n, 2)
