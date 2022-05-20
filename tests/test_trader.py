@@ -1,4 +1,3 @@
-from turtle import position
 import pytest
 import shioaji as sj
 
