@@ -1,5 +1,5 @@
 import pytest
-from sjtrade.utils import price_ceil, price_floor
+from sjtrade.utils import price_ceil, price_floor, price_round
 
 
 @pytest.mark.parametrize(
@@ -39,3 +39,22 @@ def test_price_ceil(input: float, expected: float):
 )
 def test_price_floor(input: float, expected: float):
     assert price_floor(input) == expected
+
+
+@pytest.mark.parametrize(
+    ("price", "up", "expected"),
+    [
+        (9.999, False, 9.99),
+        (10.19, False, 10.15),
+        (50.19, False, 50.1),
+        (101.9, False, 101.5),
+        (519.9, False, 519.0),
+        (9.989, True, 9.99),
+        (10.01, True, 10.05),
+        (50.01, True, 50.1),
+        (100.01, True, 100.5),
+        (500.01, True, 501),
+    ],
+)
+def test_price_round(price: float, up: bool, expected: float):
+    assert price_round(price, up) == expected
