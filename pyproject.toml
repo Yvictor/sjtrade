@@ -9,6 +9,7 @@ readme = "README.md"
 dynamic = ["version", "description"]
 dependencies = [
     "shioaji>=0.3.4.dev7",
+    "loguru",
 ]
 requires-python = ">=3.6"
 classifiers = [

@@ -1,3 +1,4 @@
+import loguru
 import pytest
 import shioaji as sj
 from pytest_mock import MockFixture
@@ -53,3 +54,22 @@ def api(mocker: MockFixture, stock_contracts_raw: list) -> sj.Shioaji:
     mock_api.Contracts.Options.set_status_fetched()
     mock_api.Contracts.status = sj.contracts.FetchStatus.Fetched
     return mock_api
+
+
+@pytest.fixture
+def api(mocker: MockFixture, stock_contracts_raw: list) -> sj.Shioaji:
+    mock_api = mocker.MagicMock()
+    mock_api.Contracts = sj.contracts.Contracts()
+    stream_contracts = sj.contracts.StreamStockContracts(stock_contracts_raw)
+    mock_api.Contracts.Stocks.append(stream_contracts)
+    mock_api.Contracts.Indexs.set_status_fetched()
+    mock_api.Contracts.Stocks.set_status_fetched()
+    mock_api.Contracts.Futures.set_status_fetched()
+    mock_api.Contracts.Options.set_status_fetched()
+    mock_api.Contracts.status = sj.contracts.FetchStatus.Fetched
+    return mock_api
+
+
+@pytest.fixture
+def logger(mocker: MockFixture) -> loguru._logger.Logger:
+    return mocker.patch("sjtrade.trader.logger")
