@@ -29,6 +29,19 @@ def sjtrader(api: sj.Shioaji) -> SJTrader:
     return SJTrader(api)
 
 
+@pytest.fixture
+def positions():
+    return {"1605": -1, "6290": -3, "0000": 3}
+
+@pytest.fixture
+def sjtrader_entryed(sjtrader: SJTrader, positions: dict):
+    sjtrader.api.place_order.side_effect = lambda contract, order: sj.order.Trade(
+        contract, order, sj.order.OrderStatus(status=sj.order.Status.PreSubmitted)
+    )
+    res = sjtrader.place_entry_order(positions, 1.05)
+    return sjtrader
+
+
 def test_sjtrader(api: sj.Shioaji):
     sjtrader = SJTrader(api)
     assert hasattr(sjtrader, "api")
@@ -38,14 +51,15 @@ def test_sjtrader_start(sjtrader: SJTrader):
     sjtrader.start()
 
 
-def test_sjtrader_place_entry_order(sjtrader: SJTrader, logger: loguru._logger.Logger):
+def test_sjtrader_place_entry_order(
+    sjtrader: SJTrader, logger: loguru._logger.Logger, positions: dict
+):
     sjtrader.api.place_order.side_effect = lambda contract, order: sj.order.Trade(
         contract, order, sj.order.OrderStatus(status=sj.order.Status.PreSubmitted)
     )
-    position = {"1605": -1, "6290": -3, "0000": 3}
     sjtrader.stop_loss_pct = 0.085
     sjtrader.stop_profit_pct = 0.09
-    res = sjtrader.place_entry_order(position, 1.05)
+    res = sjtrader.place_entry_order(positions, 1.05)
     logger.warning.assert_called_once()
     sjtrader.api.quote.subscribe.assert_has_calls(
         [
@@ -107,41 +121,39 @@ def test_sjtrader_place_entry_order(sjtrader: SJTrader, logger: loguru._logger.L
     assert res == expected
 
 
-def test_sjtrader_cancel_preorder_handler(sjtrader: SJTrader, mocker: MockerFixture):
-    # tick = sj.TickSTKv1.from_content("1605", "2022-05-25", 39.5, 39, 39.4,)
-    position = {"1605": -1, "6290": -3, "0000": 3}
+def test_sjtrader_cancel_preorder_handler(
+    sjtrader_entryed: SJTrader, mocker: MockerFixture, positions: dict
+):
     tick = TickSTKv1("1605", "2022-05-25 08:45:01", 43.3, True)
-    sjtrader.api.place_order.side_effect = lambda contract, order: sj.order.Trade(
-        contract, order, sj.order.OrderStatus(status=sj.order.Status.PreSubmitted)
-    )
 
     def make_cancel_order_status(trade):
         trade.status.status = sj.order.Status.Cancelled
         trade.status.cancel_quantity = trade.order.quantity
 
-    sjtrader.update_status = mocker.MagicMock(side_effect=make_cancel_order_status)
+    sjtrader_entryed.update_status = mocker.MagicMock(
+        side_effect=make_cancel_order_status
+    )
 
-    sjtrader.place_entry_order(position, 1.05)
-    sjtrader.cancel_preorder_handler(Exchange.TSE, tick)
-    sjtrader.api.cancel_order.assert_called_once_with(
-        sjtrader.positions["1605"]["entry_trades"][0]
+    sjtrader_entryed.cancel_preorder_handler(Exchange.TSE, tick)
+    sjtrader_entryed.api.cancel_order.assert_called_once_with(
+        sjtrader_entryed.positions["1605"]["entry_trades"][0]
     )
     # TODO need single trade update status interface
-    sjtrader.update_status.assert_called_once_with(
-        sjtrader.positions["1605"]["entry_trades"][0]
+    sjtrader_entryed.update_status.assert_called_once_with(
+        sjtrader_entryed.positions["1605"]["entry_trades"][0]
     )
     # sjtrader.api._solace.update_status.assert_called()
-    assert sjtrader.positions["1605"]["cancel_quantity"] == -1
+    assert sjtrader_entryed.positions["1605"]["cancel_quantity"] == -1
 
 
-def test_sjtrader_re_entry_order(sjtrader: SJTrader):
+def test_sjtrader_re_entry_order(sjtrader_entryed: SJTrader, positions: dict):
     tick = TickSTKv1("1605", "2022-05-25 08:45:01", 43.3, True)
-    sjtrader.re_entry_order(Exchange.TSE, tick)
+    sjtrader_entryed.re_entry_order(Exchange.TSE, tick)
 
 
-def test_sjtrader_intraday_handler(sjtrader: SJTrader):
+def test_sjtrader_intraday_handler(sjtrader_entryed: SJTrader):
     tick = TickSTKv1("1605", "2022-05-25 08:45:01", 43.3, True)
-    sjtrader.intraday_handler(Exchange.TSE, tick)
+    sjtrader_entryed.intraday_handler(Exchange.TSE, tick)
 
 
 def test_sjtrader_place_cover_order(sjtrader: SJTrader):

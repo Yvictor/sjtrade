@@ -57,10 +57,10 @@ class SJTrader:
         self._stop_profit_pct = v
 
     def place_entry_order(
-        self, position: Dict[str, int], pct: float
+        self, positions: Dict[str, int], pct: float
     ) -> List[sj.order.Trade]:
         trades = []
-        for code, pos in position.items():
+        for code, pos in positions.items():
             contract = self.api.Contracts.Stocks[code]
             if not contract:
                 logger.warning(f"Code: {code} not exist in TW Stock.")
@@ -74,7 +74,7 @@ class SJTrader:
                 )
                 self.positions[code] = dict(
                     contract=contract,
-                    quantity=position[code],
+                    quantity=positions[code],
                     stop_loss_price=price_round(stop_loss_price, pos > 0),
                     stop_profit_price=price_round(stop_profit_price, pos < 0),
                     cancel_quantity=0,
@@ -100,7 +100,6 @@ class SJTrader:
                     trade,
                 ]
         return trades
-    
 
     def cancel_preorder_handler(self, exchange: Exchange, tick: sj.TickSTKv1):
         position = self.positions[tick.code]
@@ -117,11 +116,11 @@ class SJTrader:
                         else:
                             logger.warning("position {} not cancel....")
                             # TODO handel it
-    
+
     def re_entry_order(self, exchange: Exchange, tick: sj.TickSTKv1):
         position = self.positions[tick.code]
         contract = position["contract"]
-    
+
         # 9:00 -> first
         if not tick.simtrade:
             if tick.code not in self.open_price:
@@ -174,7 +173,7 @@ class SJTrader:
 
     def place_cover_order(self, position):
         pass
-    
+
     def open_position_cover(self):
         pass
 
