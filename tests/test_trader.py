@@ -188,9 +188,31 @@ def test_sjtrader_re_entry_order(
     )
 
 
-def test_sjtrader_intraday_handler(sjtrader_entryed: SJTrader):
+def test_sjtrader_stop_profit(sjtrader_entryed: SJTrader, mocker: MockerFixture):
+    tick = TickSTKv1("1605", "2022-05-25 08:45:01", 35.5, False)
+    position = sjtrader_entryed.positions["1605"]
+    position["open_quantity"] = -1
+    sjtrader_entryed.place_cover_order = mocker.MagicMock()
+    sjtrader_entryed.stop_profit(position, tick)
+    sjtrader_entryed.place_cover_order.assert_called_once()
+
+
+def test_sjtrader_stop_loss(sjtrader_entryed: SJTrader, mocker: MockerFixture):
+    tick = TickSTKv1("1605", "2022-05-25 08:45:01", 43.3, False)
+    position = sjtrader_entryed.positions["1605"]
+    position["open_quantity"] = -1
+    sjtrader_entryed.place_cover_order = mocker.MagicMock()
+    sjtrader_entryed.stop_loss(position, tick)
+    sjtrader_entryed.place_cover_order.assert_called_once()
+
+
+def test_sjtrader_intraday_handler(sjtrader_entryed: SJTrader, mocker: MockerFixture):
     tick = TickSTKv1("1605", "2022-05-25 08:45:01", 43.3, True)
+    sjtrader_entryed.stop_profit = mocker.MagicMock()
+    sjtrader_entryed.stop_loss = mocker.MagicMock()
     sjtrader_entryed.intraday_handler(Exchange.TSE, tick)
+    sjtrader_entryed.stop_profit.assert_called_once()
+    sjtrader_entryed.stop_loss.assert_called_once()
 
 
 def test_sjtrader_place_cover_order(sjtrader: SJTrader):

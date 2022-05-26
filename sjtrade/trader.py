@@ -41,7 +41,6 @@ class SJTrader:
     def start(self):
         # positions = read_position(self._position_filepath)
         pass
-        
 
     @property
     def stop_loss_pct(self) -> float:
@@ -137,7 +136,10 @@ class SJTrader:
         if not tick.simtrade:
             if tick.code not in self.open_price:
                 self.open_price[tick.code] = tick.close
-                if position["cancel_quantity"] and tick.close < position["stop_loss_price"]:
+                if (
+                    position["cancel_quantity"]
+                    and tick.close < position["stop_loss_price"]
+                ):
                     trade = self.api.place_order(
                         contract=contract,
                         order=sj.order.TFTStockOrder(
@@ -155,19 +157,14 @@ class SJTrader:
     def intraday_handler(self, exchange: Exchange, tick: sj.TickSTKv1):
         position = self.positions[tick.code]
         # 9:00 -> 13:24:49 stop loss stop profit
+        self.stop_loss(position, tick)
+        self.stop_profit(position, tick)
+
+        # 13:26 place cover order
+        self.open_position_cover()
+
+    def stop_profit(self, position, tick: sj.TickSTKv1):
         if not tick.simtrade:
-            if (
-                position["open_quantity"] > 0
-                and tick.close <= position["stop_loss_price"]
-            ):
-                self.place_cover_order(position)
-
-            if (
-                position["open_quantity"] < 0
-                and tick.close >= position["stop_loss_price"]
-            ):
-                self.place_cover_order(position)
-
             if (
                 position["open_quantity"] > 0
                 and tick.close >= position["stop_profit_price"]
@@ -180,8 +177,19 @@ class SJTrader:
             ):
                 self.place_cover_order(position)
 
-        # 13:26 place cover order
-        self.open_position_cover()
+    def stop_loss(self, position, tick: sj.TickSTKv1):
+        if not tick.simtrade:
+            if (
+                position["open_quantity"] > 0
+                and tick.close <= position["stop_loss_price"]
+            ):
+                self.place_cover_order(position)
+
+            if (
+                position["open_quantity"] < 0
+                and tick.close >= position["stop_loss_price"]
+            ):
+                self.place_cover_order(position)
 
     def place_cover_order(self, position):
         pass
