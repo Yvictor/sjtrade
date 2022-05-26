@@ -1,9 +1,9 @@
 from dataclasses import dataclass, field
-from re import L
 from typing import Dict, List
 import shioaji as sj
 
 from .utils import price_round
+from .io.file import read_position
 from loguru import logger
 from shioaji.constant import (
     Action,
@@ -34,11 +34,14 @@ class SJTrader:
         self._stop_loss_pct = 0.09
         self._stop_profit_pct = 0.09
         self.open_price = {}
+        self._position_filepath = "position.txt"
         # self.account = api.stock_account
         # self.entry_trades: Dict[str, sj.order.Trade] = {}
 
     def start(self):
+        # positions = read_position(self._position_filepath)
         pass
+        
 
     @property
     def stop_loss_pct(self) -> float:
@@ -55,6 +58,14 @@ class SJTrader:
     @stop_profit_pct.setter
     def stop_profit_pct(self, v: float) -> float:
         self._stop_profit_pct = v
+
+    @property
+    def position_filepath(self) -> float:
+        return self._position_filepath
+
+    @position_filepath.setter
+    def position_filepath(self, v: str) -> float:
+        self._position_filepath = v
 
     def place_entry_order(
         self, positions: Dict[str, int], pct: float
@@ -99,6 +110,7 @@ class SJTrader:
                 self.positions[code]["entry_trades"] = [
                     trade,
                 ]
+        self.api.update_status()
         return trades
 
     def cancel_preorder_handler(self, exchange: Exchange, tick: sj.TickSTKv1):
@@ -125,10 +137,10 @@ class SJTrader:
         if not tick.simtrade:
             if tick.code not in self.open_price:
                 self.open_price[tick.code] = tick.close
-                if tick.close < position["stop_loss_price"]:
+                if position["cancel_quantity"] and tick.close < position["stop_loss_price"]:
                     trade = self.api.place_order(
                         contract=contract,
-                        order=sj.Order(
+                        order=sj.order.TFTStockOrder(
                             price=0,
                             quantity=abs(position["quantity"]),
                             action=Action.Buy
@@ -178,5 +190,5 @@ class SJTrader:
         pass
 
     def update_status(self, trade: sj.order.Trade) -> sj.order.Trade:
-        self.api._solace.update_status(trade.order.account, seqno=trade.status.seqno)
+        self.api._solace.update_status(trade.order.account, seqno=trade.order.seqno)
         return trade
