@@ -287,8 +287,22 @@ def gen_sample_order_msg():
     pass
 
 
-def gen_sample_deal_msg():
-    pass
+def gen_sample_deal_msg(code: str, action: Action, quantity: int):
+    return {
+        "trade_id": "12ab3456",
+        "exchange_seq": "123456",
+        "broker_id": "your_broker_id",
+        "account_id": "your_account_id",
+        "action": action,
+        "code": code,
+        "order_cond": StockOrderCond.Cash,
+        "order_lot": TFTStockOrderLot.Common,
+        "price": 12,
+        "quantity": quantity,
+        "web_id": "137",
+        "custom_field": "dt1",
+        "ts": 1583828972,
+    }
 
 
 def test_sjtrader_order_deal_handler_receive_order_msg(
@@ -317,8 +331,16 @@ def test_sjtrader_order_handler(sjtrader_entryed: SJTrader, order_msg: dict):
     sjtrader_entryed.order_handler(order_msg, sjtrader_entryed.positions["1605"])
 
 
-def test_sjtrader_deal_handler(sjtrader_entryed: SJTrader, deal_msg: dict):
-    sjtrader_entryed.deal_handler(deal_msg, sjtrader_entryed.positions["1605"])
+def test_sjtrader_deal_handler(sjtrader_entryed: SJTrader):
+    position = sjtrader_entryed.positions["1605"]
+    deal_msg = gen_sample_deal_msg("1605", Action.Sell, 1)
+    sjtrader_entryed.deal_handler(deal_msg, position)
+    assert position.open_quantity == -1
+    assert position.entry_quantity == -1
+    deal_msg = gen_sample_deal_msg("1605", Action.Buy, 1)
+    sjtrader_entryed.deal_handler(deal_msg, position)
+    assert position.open_quantity == 0
+    assert position.cover_quantity == 1
 
 
 def test_sjtrader_update_status(sjtrader_entryed: SJTrader):

@@ -206,12 +206,23 @@ class SJTrader:
         elif order_stats == OrderState.TFTDeal and msg["custom_field"] == self.name:
             self.deal_handler(msg, self.positions[msg["code"]])
 
-    def order_handler(self, msg: Dict, position: Dict):
+    def order_handler(self, msg: Dict, position: Position):
         pass
 
-    def deal_handler(self, msg: Dict, position: Dict):
+    def deal_handler(self, msg: Dict, position: Position):
         with position.lock:
-            msg["quantity"]
+            if msg["action"] == Action.Sell:
+                position.open_quantity -= msg["quantity"]
+                if position.quantity < 0:
+                    position.entry_quantity -= msg["quantity"]
+                else:
+                    position.cover_quantity -= msg["quantity"]
+            else:
+                position.open_quantity += msg["quantity"]
+                if position.quantity < 0:
+                    position.cover_quantity += msg["quantity"]
+                else:
+                    position.entry_quantity += msg["quantity"]
 
     def update_status(self, trade: sj.order.Trade) -> sj.order.Trade:
         self.api._solace.update_status(trade.order.account, seqno=trade.order.seqno)
