@@ -41,6 +41,7 @@ class SJTrader:
         self._stop_profit_pct = 0.09
         self.open_price = {}
         self._position_filepath = "position.txt"
+        self.name = "dt1"
         # self.account = api.stock_account
         # self.entry_trades: Dict[str, sj.order.Trade] = {}
 
@@ -114,6 +115,7 @@ class SJTrader:
                             action=Action.Buy if pos > 0 else Action.Sell,
                             price_type=TFTStockPriceType.LMT,
                             order_type=TFTOrderType.ROD,
+                            custom_field=self.name,
                         ),
                     )
                     trades.append(trade)

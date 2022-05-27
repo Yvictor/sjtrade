@@ -91,6 +91,7 @@ def test_sjtrader_place_entry_order(
                 action=Action.Sell,
                 price_type=TFTStockPriceType.LMT,
                 order_type=TFTOrderType.ROD,
+                custom_field=sjtrader.name,
             ),
             status=sj.order.OrderStatus(status=sj.order.Status.PreSubmitted),
         ),
@@ -102,6 +103,7 @@ def test_sjtrader_place_entry_order(
                 action=Action.Sell,
                 price_type=TFTStockPriceType.LMT,
                 order_type=TFTOrderType.ROD,
+                custom_field=sjtrader.name,
             ),
             status=sj.order.OrderStatus(status=sj.order.Status.PreSubmitted),
         ),
@@ -291,6 +293,14 @@ def deal_msg():
         "custom_field": "test",
         "ts": 1583828972,
     }
+
+
+def gen_sample_order_msg():
+    pass
+
+
+def gen_sample_deal_msg():
+    pass
 
 
 def test_sjtrader_order_deal_handler_receive_order_msg(
