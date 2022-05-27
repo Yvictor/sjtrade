@@ -36,7 +36,7 @@ class Position:
 class SJTrader:
     def __init__(self, api: sj.Shioaji):
         self.api = api
-        self.positions = {}
+        self.positions: Dict[str, Position] = {}
         self._stop_loss_pct = 0.09
         self._stop_profit_pct = 0.09
         self.open_price = {}
@@ -89,22 +89,15 @@ class SJTrader:
                 stop_profit_price = contract.reference * (
                     1 + (1 if pos > 0 else -1) * (self._stop_profit_pct)
                 )
-                self.positions[code] = dict(
+                self.positions[code] = Position(
                     contract=contract,
                     quantity=positions[code],
                     stop_loss_price=price_round(stop_loss_price, pos > 0),
                     stop_profit_price=price_round(stop_profit_price, pos < 0),
-                    cancel_quantity=0,
-                    entry_order_quantity=0,
-                    entry_quantity=0,
-                    open_quantity=0,
-                    cover_order_quantity=0,
-                    cover_quantity=0,
-                    lock=Lock(),
                 )
                 self.api.quote.subscribe(contract, version=QuoteVersion.v1)
                 # TODO over 499 need handle
-                with self.positions[code]["lock"]:
+                with self.positions[code].lock:
                     trade = self.api.place_order(
                         contract=self.api.Contracts.Stocks[code],
                         order=sj.Order(
@@ -119,49 +112,39 @@ class SJTrader:
                         ),
                     )
                     trades.append(trade)
-                    self.positions[code]["entry_trades"] = [
-                        trade,
-                    ]
+                    self.positions[code].entry_trades.append(trade)
                     # self.positions[code]["entry_order_quantity"] = pos
         self.api.update_status()
         return trades
 
     def cancel_preorder_handler(self, exchange: Exchange, tick: sj.TickSTKv1):
         position = self.positions[tick.code]
-        contract = position["contract"]
         # 8:55 - 8:59:55
         if tick.simtrade:
-            if position["quantity"] < 0 and tick.close == contract.limit_up:
-                for trade in self.positions[tick.code]["entry_trades"]:
+            if position.quantity < 0 and tick.close == position.contract.limit_up:
+                for trade in self.positions[tick.code].entry_trades:
                     if trade.status.status != sj.order.Status.Cancelled:
                         self.api.cancel_order(trade)
                         self.update_status(trade)
                         if trade.status.status == sj.order.Status.Cancelled:
-                            position["cancel_quantity"] -= trade.status.cancel_quantity
+                            position.cancel_quantity -= trade.status.cancel_quantity
                         else:
                             logger.warning("position {} not cancel....")
                             # TODO handel it
 
     def re_entry_order(self, exchange: Exchange, tick: sj.TickSTKv1):
         position = self.positions[tick.code]
-        contract = position["contract"]
-
         # 9:00 -> first
         if not tick.simtrade:
             if tick.code not in self.open_price:
                 self.open_price[tick.code] = tick.close
-                if (
-                    position["cancel_quantity"]
-                    and tick.close < position["stop_loss_price"]
-                ):
+                if position.cancel_quantity and tick.close < position.stop_loss_price:
                     trade = self.api.place_order(
-                        contract=contract,
+                        contract=position.contract,
                         order=sj.order.TFTStockOrder(
                             price=0,
-                            quantity=abs(position["quantity"]),
-                            action=Action.Buy
-                            if position["quantity"] > 0
-                            else Action.Sell,
+                            quantity=abs(position.quantity),
+                            action=Action.Buy if position.quantity > 0 else Action.Sell,
                             price_type=TFTStockPriceType.MKT,
                             order_type=TFTOrderType.ROD,
                         ),
@@ -177,45 +160,33 @@ class SJTrader:
         # 13:26 place cover order
         self.open_position_cover()
 
-    def stop_profit(self, position, tick: sj.TickSTKv1):
+    def stop_profit(self, position: Position, tick: sj.TickSTKv1):
         if not tick.simtrade:
-            if (
-                position["open_quantity"] > 0
-                and tick.close >= position["stop_profit_price"]
-            ):
+            if position.open_quantity > 0 and tick.close >= position.stop_profit_price:
                 self.place_cover_order(position)
 
-            if (
-                position["open_quantity"] < 0
-                and tick.close <= position["stop_profit_price"]
-            ):
+            if position.open_quantity < 0 and tick.close <= position.stop_profit_price:
                 self.place_cover_order(position)
 
-    def stop_loss(self, position, tick: sj.TickSTKv1):
+    def stop_loss(self, position: Position, tick: sj.TickSTKv1):
         if not tick.simtrade:
-            if (
-                position["open_quantity"] > 0
-                and tick.close <= position["stop_loss_price"]
-            ):
+            if position.open_quantity > 0 and tick.close <= position.stop_loss_price:
                 self.place_cover_order(position)
 
-            if (
-                position["open_quantity"] < 0
-                and tick.close >= position["stop_loss_price"]
-            ):
+            if position.open_quantity < 0 and tick.close >= position.stop_loss_price:
                 self.place_cover_order(position)
 
-    def place_cover_order(self, position):
-        if position["open_quantity"] + position["cover_order_quantity"]:
+    def place_cover_order(self, position: Position):
+        if position.open_quantity + position.cover_order_quantity:
             trade = self.api.place_order(
-                contract=position["contract"],
+                contract=position.contract,
                 order=sj.order.TFTStockOrder(
                     price=0,
                     quantity=abs(
-                        position["open_quantity"] + position["cover_order_quantity"]
+                        position.open_quantity + position.cover_order_quantity
                     ),
                     action=Action.Buy
-                    if position["open_quantity"] + position["cover_order_quantity"] < 0
+                    if position.open_quantity + position.cover_order_quantity < 0
                     else Action.Sell,
                     price_type=TFTStockPriceType.MKT,
                     order_type=TFTOrderType.ROD,
@@ -227,16 +198,20 @@ class SJTrader:
         pass
 
     def order_deal_handler(self, order_stats: OrderState, msg: Dict):
-        if order_stats == OrderState.TFTOrder:
+        if (
+            order_stats == OrderState.TFTOrder
+            and msg["order"]["custom_field"] == self.name
+        ):
             self.order_handler(msg, self.positions[msg["contract"]["code"]])
-        elif order_stats == OrderState.TFTDeal:
+        elif order_stats == OrderState.TFTDeal and msg["custom_field"] == self.name:
             self.deal_handler(msg, self.positions[msg["code"]])
 
     def order_handler(self, msg: Dict, position: Dict):
         pass
 
     def deal_handler(self, msg: Dict, position: Dict):
-        pass
+        with position.lock:
+            msg["quantity"]
 
     def update_status(self, trade: sj.order.Trade) -> sj.order.Trade:
         self.api._solace.update_status(trade.order.account, seqno=trade.order.seqno)
