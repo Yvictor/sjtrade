@@ -13,6 +13,9 @@ from shioaji.constant import (
     TFTOrderType,
     QuoteVersion,
     Exchange,
+    OrderState,
+    TFTStockOrderLot,
+    StockOrderCond,
 )
 
 
@@ -111,10 +114,15 @@ def test_sjtrader_place_entry_order(
             stop_profit_price=35.9,
             cancel_quantity=0,
             entry_quantity=0,
+            open_quantity=0,
             cover_quantity=0,
             entry_trades=[
                 expected[0],
             ],
+            entry_order_quantity=0,
+            cover_order_quantity=0,
+            lock=sjtrader.positions["1605"]["lock"]
+            # cover_trades=[],
         ),
         "6290": dict(
             contract=sjtrader.api.Contracts.Stocks["6290"],
@@ -123,10 +131,15 @@ def test_sjtrader_place_entry_order(
             stop_profit_price=52.2,
             cancel_quantity=0,
             entry_quantity=0,
+            open_quantity=0,
             cover_quantity=0,
             entry_trades=[
                 expected[1],
             ],
+            entry_order_quantity=0,
+            cover_order_quantity=0,
+            lock=sjtrader.positions["6290"]["lock"]
+            # cover_trades=[],
         ),
     }
     assert len(res) == 2
@@ -215,12 +228,99 @@ def test_sjtrader_intraday_handler(sjtrader_entryed: SJTrader, mocker: MockerFix
     sjtrader_entryed.stop_loss.assert_called_once()
 
 
-def test_sjtrader_place_cover_order(sjtrader: SJTrader):
-    sjtrader.place_cover_order({})
+def test_sjtrader_place_cover_order(sjtrader_entryed: SJTrader):
+    position = sjtrader_entryed.positions["1605"]
+    position["open_quantity"] = -1
+    sjtrader_entryed.place_cover_order(position)
+    # TODO assert
 
 
 def test_sjtrader_open_position_cover(sjtrader: SJTrader):
     sjtrader.open_position_cover()
+
+
+@pytest.fixture
+def order_msg():
+    return {
+        "operation": {"op_type": "New", "op_code": "00", "op_msg": ""},
+        "order": {
+            "id": "c21b876d",
+            "seqno": "429832",
+            "ordno": "W2892",
+            "action": "Sell",
+            "price": 44.3,
+            "quantity": 1,
+            "order_cond": "Cash",
+            "order_lot": "Common",
+            "custom_field": "test",
+            "order_type": "ROD",
+            "price_type": "LMT",
+        },
+        "status": {
+            "id": "c21b876d",
+            "exchange_ts": 1583828972,
+            "modified_price": 0,
+            "cancel_quantity": 0,
+            "web_id": "137",
+        },
+        "contract": {
+            "security_type": "STK",
+            "exchange": "TSE",
+            "code": "1605",
+            "symbol": "",
+            "name": "",
+            "currency": "TWD",
+        },
+    }
+
+
+@pytest.fixture
+def deal_msg():
+    return {
+        "trade_id": "12ab3456",
+        "exchange_seq": "123456",
+        "broker_id": "your_broker_id",
+        "account_id": "your_account_id",
+        "action": Action.Buy,
+        "code": "1605",
+        "order_cond": StockOrderCond.Cash,
+        "order_lot": TFTStockOrderLot.Common,
+        "price": 12,
+        "quantity": 10,
+        "web_id": "137",
+        "custom_field": "test",
+        "ts": 1583828972,
+    }
+
+
+def test_sjtrader_order_deal_handler_receive_order_msg(
+    sjtrader_entryed: SJTrader, order_msg: dict, mocker: MockerFixture
+):
+    sjtrader_entryed.order_handler = mocker.MagicMock()
+    sjtrader_entryed.order_deal_handler(OrderState.TFTOrder, order_msg)
+    sjtrader_entryed.order_handler.assert_called_once_with(
+        order_msg,
+        sjtrader_entryed.positions["1605"],
+    )
+
+
+def test_sjtrader_order_deal_handler_receive_deal_msg(
+    sjtrader_entryed: SJTrader, deal_msg: dict, mocker: MockerFixture
+):
+    sjtrader_entryed.deal_handler = mocker.MagicMock()
+    sjtrader_entryed.order_deal_handler(OrderState.TFTDeal, deal_msg)
+    sjtrader_entryed.deal_handler.assert_called_once_with(
+        deal_msg,
+        sjtrader_entryed.positions["1605"],
+    )
+
+
+def test_sjtrader_order_handler(sjtrader_entryed: SJTrader, order_msg: dict):
+    sjtrader_entryed.order_handler(order_msg, sjtrader_entryed.positions["1605"])
+
+
+def test_sjtrader_deal_handler(sjtrader_entryed: SJTrader, deal_msg: dict):
+    sjtrader_entryed.deal_handler(deal_msg, sjtrader_entryed.positions["1605"])
 
 
 def test_sjtrader_update_status(sjtrader_entryed: SJTrader):

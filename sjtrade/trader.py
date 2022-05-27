@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 from typing import Dict, List
+from threading import Lock
 import shioaji as sj
 
 from .utils import price_round
@@ -11,6 +12,7 @@ from shioaji.constant import (
     TFTOrderType,
     QuoteVersion,
     Exchange,
+    OrderState,
 )
 
 
@@ -21,10 +23,14 @@ class Position:
     stop_loss_price: float
     stop_profit_price: float
     entry_trades: List[sj.order.Trade] = field(default_factory=list)
+    cover_trades: List[sj.order.Trade] = field(default_factory=list)
     cancel_quantity: int = 0
+    entry_order_quantity: int = 0
     entry_quantity: int = 0
     open_quantity: int = 0
+    cover_order_quantity: int = 0
     cover_quantity: int = 0
+    lock: Lock = field(default_factory=Lock)
 
 
 class SJTrader:
@@ -88,27 +94,33 @@ class SJTrader:
                     stop_loss_price=price_round(stop_loss_price, pos > 0),
                     stop_profit_price=price_round(stop_profit_price, pos < 0),
                     cancel_quantity=0,
+                    entry_order_quantity=0,
                     entry_quantity=0,
+                    open_quantity=0,
+                    cover_order_quantity=0,
                     cover_quantity=0,
+                    lock=Lock(),
                 )
                 self.api.quote.subscribe(contract, version=QuoteVersion.v1)
                 # TODO over 499 need handle
-                trade = self.api.place_order(
-                    contract=self.api.Contracts.Stocks[code],
-                    order=sj.Order(
-                        price=price_round(
-                            self.api.Contracts.Stocks[code].reference * pct, pos > 0
+                with self.positions[code]["lock"]:
+                    trade = self.api.place_order(
+                        contract=self.api.Contracts.Stocks[code],
+                        order=sj.Order(
+                            price=price_round(
+                                self.api.Contracts.Stocks[code].reference * pct, pos > 0
+                            ),
+                            quantity=abs(pos),
+                            action=Action.Buy if pos > 0 else Action.Sell,
+                            price_type=TFTStockPriceType.LMT,
+                            order_type=TFTOrderType.ROD,
                         ),
-                        quantity=abs(pos),
-                        action=Action.Buy if pos > 0 else Action.Sell,
-                        price_type=TFTStockPriceType.LMT,
-                        order_type=TFTOrderType.ROD,
-                    ),
-                )
-                trades.append(trade)
-                self.positions[code]["entry_trades"] = [
-                    trade,
-                ]
+                    )
+                    trades.append(trade)
+                    self.positions[code]["entry_trades"] = [
+                        trade,
+                    ]
+                    # self.positions[code]["entry_order_quantity"] = pos
         self.api.update_status()
         return trades
 
@@ -192,9 +204,36 @@ class SJTrader:
                 self.place_cover_order(position)
 
     def place_cover_order(self, position):
-        pass
+        if position["open_quantity"] + position["cover_order_quantity"]:
+            trade = self.api.place_order(
+                contract=position["contract"],
+                order=sj.order.TFTStockOrder(
+                    price=0,
+                    quantity=abs(
+                        position["open_quantity"] + position["cover_order_quantity"]
+                    ),
+                    action=Action.Buy
+                    if position["open_quantity"] + position["cover_order_quantity"] < 0
+                    else Action.Sell,
+                    price_type=TFTStockPriceType.MKT,
+                    order_type=TFTOrderType.ROD,
+                ),
+            )
+            self.update_status(trade)
 
     def open_position_cover(self):
+        pass
+
+    def order_deal_handler(self, order_stats: OrderState, msg: Dict):
+        if order_stats == OrderState.TFTOrder:
+            self.order_handler(msg, self.positions[msg["contract"]["code"]])
+        elif order_stats == OrderState.TFTDeal:
+            self.deal_handler(msg, self.positions[msg["code"]])
+
+    def order_handler(self, msg: Dict, position: Dict):
+        pass
+
+    def deal_handler(self, msg: Dict, position: Dict):
         pass
 
     def update_status(self, trade: sj.order.Trade) -> sj.order.Trade:
