@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from turtle import position
 from typing import Dict, List
 from threading import Lock
 import shioaji as sj
@@ -74,7 +75,7 @@ class SJTrader:
     @stop_profit_pct.setter
     def stop_profit_pct(self, v: float) -> float:
         self._stop_profit_pct = v
-    
+
     @property
     def entry_pct(self) -> float:
         return self._entry_pct
@@ -151,7 +152,7 @@ class SJTrader:
                         #     position.cancel_preorder = True
                         # else:
                         #     logger.warning("position {} not cancel....")
-                            # TODO handel it
+                        # TODO handel it
 
     def re_entry_order(self, position: Position, tick: sj.TickSTKv1):
         # 9:00 -> first
@@ -213,7 +214,13 @@ class SJTrader:
             self.update_status(trade)
 
     def open_position_cover(self):
-        pass
+        self.api.update_status()
+        for code, position in self.positions.items():
+            if position.cover_order_quantity:
+                for trade in position.cover_trades:
+                    self.api.cancel_order(trade)
+            # event wait cancel
+            self.place_cover_order(position)
 
     def order_deal_handler(self, order_stats: OrderState, msg: Dict):
         if (
@@ -241,6 +248,17 @@ class SJTrader:
                             position.entry_order_quantity += order_quantity
                 else:
                     cancel_quantity = msg["status"]["cancel_quantity"]
+                    # cancel entry cover order quantity
+                    # if msg["order"]["action"] == Action.Sell:
+                    #     if position.quantity < 0:
+                    #         position.entry_order_quantity -= order_quantity
+                    #     else:
+                    #         position.cover_order_quantity -= order_quantity
+                    # else:
+                    #     if position.quantity < 0:
+                    #         position.cover_order_quantity += order_quantity
+                    #     else:
+                    #         position.entry_order_quantity += order_quantity
                     position.cancel_quantity += cancel_quantity
         else:
             logger.error(f"Please Check: {msg}")
