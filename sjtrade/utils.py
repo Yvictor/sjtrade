@@ -1,4 +1,6 @@
 import math
+import time
+import datetime
 
 
 def price_ceil(price: float) -> float:
@@ -23,3 +25,13 @@ def price_round(price: float, up: bool = False):
     return round(
         roudnf(price * n + ((5 * int(up) - (price * n % 5)) * (1 - quinary))) / n, 2
     )
+
+
+def sleep_until(hour: int, minute: int, sec: int = 0) -> None:
+    now = datetime.datetime.utcnow() + datetime.timedelta(hours=8)
+    d = datetime.timedelta(days=1) if now.hour > 13 else datetime.timedelta(days=0)
+    until_time = datetime.datetime(now.year, now.month, now.day, hour, minute, sec) + d
+    delta = until_time - now
+    delta_sec = delta.total_seconds()
+    if delta_sec > 0:
+        time.sleep(delta_sec)

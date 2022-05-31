@@ -59,10 +59,23 @@ def test_sjtrader(api: sj.Shioaji):
     assert sjtrader.stop_loss_pct == 0.1
     sjtrader.position_filepath = "pos.txt"
     assert sjtrader.position_filepath == "pos.txt"
+    sjtrader.entry_pct = 0.07
+    assert sjtrader.entry_pct == 0.07
 
 
-def test_sjtrader_start(sjtrader: SJTrader):
+def test_sjtrader_start(sjtrader: SJTrader, mocker: MockerFixture, positions: dict):
+    read_position_mock = mocker.patch("sjtrade.trader.read_position")
+    read_position_mock.return_value = positions
+    sleep_until_mock = mocker.patch("sjtrade.trader.sleep_until")
     sjtrader.start()
+    read_position_mock.assert_called_once()
+    sjtrader.api.set_order_callback.assert_called_once_with(sjtrader.order_deal_handler)
+    sjtrader.api.quote.set_on_tick_stk_v1_callback.assert_has_calls(
+        [((sjtrader.cancel_preorder_handler,),), ((sjtrader.intraday_handler,),)]
+    )
+    sleep_until_mock.assert_has_calls(
+        [((8, 45),), ((8, 54, 59),), ((8, 59, 55),), ((13, 25, 59),)]
+    )
 
 
 def test_sjtrader_place_entry_order(
@@ -174,13 +187,13 @@ def test_sjtrader_re_entry_order(
     sjtrader_entryed.update_status = mocker.MagicMock(
         side_effect=make_cancel_order_status
     )
-
-    sjtrader_entryed.cancel_preorder_handler(Exchange.TSE, tick)
+    position = sjtrader_entryed.positions["1605"]
+    sjtrader_entryed.cancel_preorder_handler(position, tick)
 
     tick = TickSTKv1("1605", "2022-05-25 09:00:01", 35, False)
-    sjtrader_entryed.re_entry_order(Exchange.TSE, tick)
+    sjtrader_entryed.re_entry_order(position, tick)
     sjtrader_entryed.api.place_order.assert_called_with(
-        contract=sjtrader_entryed.positions["1605"].contract,
+        contract=position.contract,
         order=sj.order.TFTStockOrder(
             price=0,
             quantity=1,
@@ -211,9 +224,11 @@ def test_sjtrader_stop_loss(sjtrader_entryed: SJTrader, mocker: MockerFixture):
 
 def test_sjtrader_intraday_handler(sjtrader_entryed: SJTrader, mocker: MockerFixture):
     tick = TickSTKv1("1605", "2022-05-25 08:45:01", 43.3, True)
+    sjtrader_entryed.re_entry_order = mocker.MagicMock()
     sjtrader_entryed.stop_profit = mocker.MagicMock()
     sjtrader_entryed.stop_loss = mocker.MagicMock()
     sjtrader_entryed.intraday_handler(Exchange.TSE, tick)
+    sjtrader_entryed.re_entry_order.assert_called_once()
     sjtrader_entryed.stop_profit.assert_called_once()
     sjtrader_entryed.stop_loss.assert_called_once()
 

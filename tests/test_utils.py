@@ -1,5 +1,6 @@
 import pytest
-from sjtrade.utils import price_ceil, price_floor, price_round
+from pytest_mock import MockerFixture
+from sjtrade.utils import price_ceil, price_floor, price_round, sleep_until
 
 
 @pytest.mark.parametrize(
@@ -58,3 +59,8 @@ def test_price_floor(input: float, expected: float):
 )
 def test_price_round(price: float, up: bool, expected: float):
     assert price_round(price, up) == expected
+
+def test_sleep_until(mocker: MockerFixture):
+    sleep_mock = mocker.patch("time.sleep")
+    sleep_until(9, 0, 1)
+    sleep_mock.assert_called_once()

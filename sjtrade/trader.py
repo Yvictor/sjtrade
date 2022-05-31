@@ -3,7 +3,7 @@ from typing import Dict, List
 from threading import Lock
 import shioaji as sj
 
-from .utils import price_round
+from .utils import price_round, sleep_until
 from .io.file import read_position
 from loguru import logger
 from shioaji.constant import (
@@ -40,6 +40,7 @@ class SJTrader:
         self.positions: Dict[str, Position] = {}
         self._stop_loss_pct = 0.09
         self._stop_profit_pct = 0.09
+        self._entry_pct = 0.05
         self.open_price = {}
         self._position_filepath = "position.txt"
         self.name = "dt1"
@@ -47,8 +48,16 @@ class SJTrader:
         # self.entry_trades: Dict[str, sj.order.Trade] = {}
 
     def start(self):
-        # positions = read_position(self._position_filepath)
-        pass
+        positions = read_position(self._position_filepath)
+        self.api.set_order_callback(self.order_deal_handler)
+        sleep_until(8, 45)
+        self.place_entry_order(positions, self.entry_pct)
+        sleep_until(8, 54, 59)
+        self.api.quote.set_on_tick_stk_v1_callback(self.cancel_preorder_handler)
+        sleep_until(8, 59, 55)
+        self.api.quote.set_on_tick_stk_v1_callback(self.intraday_handler)
+        sleep_until(13, 25, 59)
+        self.open_position_cover()
 
     @property
     def stop_loss_pct(self) -> float:
@@ -65,6 +74,14 @@ class SJTrader:
     @stop_profit_pct.setter
     def stop_profit_pct(self, v: float) -> float:
         self._stop_profit_pct = v
+    
+    @property
+    def entry_pct(self) -> float:
+        return self._entry_pct
+
+    @entry_pct.setter
+    def entry_pct(self, v: float) -> float:
+        self._entry_pct = v
 
     @property
     def position_filepath(self) -> float:
@@ -136,8 +153,7 @@ class SJTrader:
                         #     logger.warning("position {} not cancel....")
                             # TODO handel it
 
-    def re_entry_order(self, exchange: Exchange, tick: sj.TickSTKv1):
-        position = self.positions[tick.code]
+    def re_entry_order(self, position: Position, tick: sj.TickSTKv1):
         # 9:00 -> first
         if not tick.simtrade:
             if tick.code not in self.open_price:
@@ -157,12 +173,10 @@ class SJTrader:
 
     def intraday_handler(self, exchange: Exchange, tick: sj.TickSTKv1):
         position = self.positions[tick.code]
+        self.re_entry_order(position, tick)
         # 9:00 -> 13:24:49 stop loss stop profit
         self.stop_loss(position, tick)
         self.stop_profit(position, tick)
-
-        # 13:26 place cover order
-        self.open_position_cover()
 
     def stop_profit(self, position: Position, tick: sj.TickSTKv1):
         if not tick.simtrade:
