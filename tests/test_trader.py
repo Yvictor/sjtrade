@@ -237,11 +237,26 @@ def test_sjtrader_place_cover_order(sjtrader_entryed: SJTrader):
     position = sjtrader_entryed.positions["1605"]
     position.open_quantity = -1
     sjtrader_entryed.place_cover_order(position)
-    # TODO assert
+    order_msg = gen_sample_order_msg("1605", Action.Buy, 1, op_type="New", op_code="00")
+    sjtrader_entryed.order_handler(order_msg, position)
+    assert position.cover_order_quantity == 1
+    # TODO assert called once with
+    # sjtrader_entryed.api.place_order.assert_has_calls([
+    #     ((), dict(contract=position.contract, order=sj.order.TFTStockOrder(
+    #         price=0,
+    #         quantity=
+    #     )))
+    # ])
+    assert len(position.cover_trades) == 1
 
 
-def test_sjtrader_open_position_cover(sjtrader: SJTrader):
-    sjtrader.open_position_cover()
+def test_sjtrader_open_position_cover(sjtrader_entryed: SJTrader):
+    position = sjtrader_entryed.positions["1605"]
+    position.open_quantity = -1
+    sjtrader_entryed.place_cover_order(position)
+    order_msg = gen_sample_order_msg("1605", Action.Buy, 1, op_type="New", op_code="00")
+    sjtrader_entryed.order_handler(order_msg, position)
+    sjtrader_entryed.open_position_cover()
 
 
 @pytest.fixture
@@ -298,8 +313,39 @@ def deal_msg():
     }
 
 
-def gen_sample_order_msg():
-    pass
+def gen_sample_order_msg(code: str, action: Action, quantity: int, op_type: str, op_code: str):
+    return {
+        "operation": {"op_type": op_type, "op_code": op_code, "op_msg": ""},
+        "order": {
+            "id": "c21b876d",
+            "seqno": "429832",
+            "ordno": "W2892",
+            "action": action,
+            "price": 44.3,
+            "quantity": quantity,
+            "order_cond": "Cash",
+            "order_lot": "Common",
+            "custom_field": "dt1",
+            "order_type": "ROD",
+            "price_type": "LMT",
+        },
+        "status": {
+            "id": "c21b876d",
+            "exchange_ts": 1583828972,
+            "order_quantity": quantity if op_type=="New" else 0,
+            "modified_price": 0.0,
+            "cancel_quantity": quantity if op_type=="Cancel" else 0,
+            "web_id": "137",
+        },
+        "contract": {
+            "security_type": "STK",
+            "exchange": "TSE",
+            "code": code,
+            "symbol": "",
+            "name": "",
+            "currency": "TWD",
+        },
+    }
 
 
 def gen_sample_deal_msg(code: str, action: Action, quantity: int):
@@ -342,9 +388,23 @@ def test_sjtrader_order_deal_handler_receive_deal_msg(
     )
 
 
-def test_sjtrader_order_handler(sjtrader_entryed: SJTrader, order_msg: dict):
-    sjtrader_entryed.order_handler(order_msg, sjtrader_entryed.positions["1605"])
+def test_sjtrader_order_handler(sjtrader_entryed: SJTrader):
+    position = sjtrader_entryed.positions["1605"]
+    order_msg = gen_sample_order_msg("1605", Action.Sell, 1, op_type="New", op_code="00")
+    sjtrader_entryed.order_handler(order_msg, position)
+    assert position.entry_order_quantity == -1
 
+    order_msg = gen_sample_order_msg("1605", Action.Sell, 1, op_type="Cancel", op_code="00")
+    sjtrader_entryed.order_handler(order_msg, position)
+    assert position.entry_order_quantity == 0
+
+    order_msg = gen_sample_order_msg("1605", Action.Buy, 1, op_type="New", op_code="00")
+    sjtrader_entryed.order_handler(order_msg, position)
+    assert position.cover_order_quantity == 1
+
+    order_msg = gen_sample_order_msg("1605", Action.Buy, 1, op_type="Cancel", op_code="00")
+    sjtrader_entryed.order_handler(order_msg, position)
+    assert position.cover_order_quantity == 0
 
 def test_sjtrader_deal_handler(sjtrader_entryed: SJTrader):
     position = sjtrader_entryed.positions["1605"]

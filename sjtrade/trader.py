@@ -1,5 +1,4 @@
 from dataclasses import dataclass, field
-from turtle import position
 from typing import Dict, List
 from threading import Lock
 import shioaji as sj
@@ -195,23 +194,35 @@ class SJTrader:
             if position.open_quantity < 0 and tick.close >= position.stop_loss_price:
                 self.place_cover_order(position)
 
-    def place_cover_order(self, position: Position):
+    def place_cover_order(self, position: Position, with_price: bool = False):
         if position.open_quantity + position.cover_order_quantity:
+            action = (
+                Action.Buy
+                if position.open_quantity + position.cover_order_quantity < 0
+                else Action.Sell
+            )
             trade = self.api.place_order(
                 contract=position.contract,
                 order=sj.order.TFTStockOrder(
-                    price=0,
+                    price=(
+                        position.contract.limit_down
+                        if action == Action.Buy
+                        else position.contract.limit_up
+                    )
+                    if with_price
+                    else 0,
                     quantity=abs(
                         position.open_quantity + position.cover_order_quantity
                     ),
-                    action=Action.Buy
-                    if position.open_quantity + position.cover_order_quantity < 0
-                    else Action.Sell,
-                    price_type=TFTStockPriceType.MKT,
+                    action=action,
+                    price_type=TFTStockPriceType.LMT
+                    if with_price
+                    else TFTStockPriceType.MKT,
                     order_type=TFTOrderType.ROD,
                 ),
             )
             self.update_status(trade)
+            position.cover_trades.append(trade)
 
     def open_position_cover(self):
         self.api.update_status()
@@ -220,7 +231,7 @@ class SJTrader:
                 for trade in position.cover_trades:
                     self.api.cancel_order(trade)
             # event wait cancel
-            self.place_cover_order(position)
+            self.place_cover_order(position, with_price=True)
 
     def order_deal_handler(self, order_stats: OrderState, msg: Dict):
         if (
@@ -247,18 +258,17 @@ class SJTrader:
                         else:
                             position.entry_order_quantity += order_quantity
                 else:
-                    cancel_quantity = msg["status"]["cancel_quantity"]
-                    # cancel entry cover order quantity
-                    # if msg["order"]["action"] == Action.Sell:
-                    #     if position.quantity < 0:
-                    #         position.entry_order_quantity -= order_quantity
-                    #     else:
-                    #         position.cover_order_quantity -= order_quantity
-                    # else:
-                    #     if position.quantity < 0:
-                    #         position.cover_order_quantity += order_quantity
-                    #     else:
-                    #         position.entry_order_quantity += order_quantity
+                    cancel_quantity = msg["status"].get("cancel_quantity", 0)
+                    if msg["order"]["action"] == Action.Sell:
+                        if position.quantity < 0:
+                            position.entry_order_quantity += cancel_quantity
+                        else:
+                            position.cover_order_quantity += cancel_quantity
+                    else:
+                        if position.quantity < 0:
+                            position.cover_order_quantity -= cancel_quantity
+                        else:
+                            position.entry_order_quantity -= cancel_quantity
                     position.cancel_quantity += cancel_quantity
         else:
             logger.error(f"Please Check: {msg}")
