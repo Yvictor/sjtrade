@@ -60,7 +60,8 @@ def test_price_floor(input: float, expected: float):
 def test_price_round(price: float, up: bool, expected: float):
     assert price_round(price, up) == expected
 
+@pytest.mark.freeze_time("2022-06-06 00:30:00 UTC")
 def test_sleep_until(mocker: MockerFixture):
     sleep_mock = mocker.patch("time.sleep")
     sleep_until(9, 0, 1)
-    sleep_mock.assert_called_once()
+    sleep_mock.assert_called_once_with(30*60 + 1)

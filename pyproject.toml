@@ -29,6 +29,7 @@ Home = "https://github.com/Yvictor/sjtrade"
 test = [
     "black",
 	"pytest>=7.1.2",
+    "pytest-freezegun",
     "pytest-mock",
     "pytest-cov",
     "codecov",
