@@ -200,6 +200,7 @@ def test_sjtrader_re_entry_order(
             action=Action.Sell,
             price_type=TFTStockPriceType.MKT,
             order_type=TFTOrderType.ROD,
+            custom_field="dt1",
         ),
     )
 
@@ -313,7 +314,9 @@ def deal_msg():
     }
 
 
-def gen_sample_order_msg(code: str, action: Action, quantity: int, op_type: str, op_code: str):
+def gen_sample_order_msg(
+    code: str, action: Action, quantity: int, op_type: str, op_code: str
+):
     return {
         "operation": {"op_type": op_type, "op_code": op_code, "op_msg": ""},
         "order": {
@@ -332,9 +335,9 @@ def gen_sample_order_msg(code: str, action: Action, quantity: int, op_type: str,
         "status": {
             "id": "c21b876d",
             "exchange_ts": 1583828972,
-            "order_quantity": quantity if op_type=="New" else 0,
+            "order_quantity": quantity if op_type == "New" else 0,
             "modified_price": 0.0,
-            "cancel_quantity": quantity if op_type=="Cancel" else 0,
+            "cancel_quantity": quantity if op_type == "Cancel" else 0,
             "web_id": "137",
         },
         "contract": {
@@ -390,11 +393,15 @@ def test_sjtrader_order_deal_handler_receive_deal_msg(
 
 def test_sjtrader_order_handler(sjtrader_entryed: SJTrader):
     position = sjtrader_entryed.positions["1605"]
-    order_msg = gen_sample_order_msg("1605", Action.Sell, 1, op_type="New", op_code="00")
+    order_msg = gen_sample_order_msg(
+        "1605", Action.Sell, 1, op_type="New", op_code="00"
+    )
     sjtrader_entryed.order_handler(order_msg, position)
     assert position.entry_order_quantity == -1
 
-    order_msg = gen_sample_order_msg("1605", Action.Sell, 1, op_type="Cancel", op_code="00")
+    order_msg = gen_sample_order_msg(
+        "1605", Action.Sell, 1, op_type="Cancel", op_code="00"
+    )
     sjtrader_entryed.order_handler(order_msg, position)
     assert position.entry_order_quantity == 0
 
@@ -402,9 +409,12 @@ def test_sjtrader_order_handler(sjtrader_entryed: SJTrader):
     sjtrader_entryed.order_handler(order_msg, position)
     assert position.cover_order_quantity == 1
 
-    order_msg = gen_sample_order_msg("1605", Action.Buy, 1, op_type="Cancel", op_code="00")
+    order_msg = gen_sample_order_msg(
+        "1605", Action.Buy, 1, op_type="Cancel", op_code="00"
+    )
     sjtrader_entryed.order_handler(order_msg, position)
     assert position.cover_order_quantity == 0
+
 
 def test_sjtrader_deal_handler(sjtrader_entryed: SJTrader):
     position = sjtrader_entryed.positions["1605"]

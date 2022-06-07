@@ -167,6 +167,7 @@ class SJTrader:
                             action=Action.Buy if position.quantity > 0 else Action.Sell,
                             price_type=TFTStockPriceType.MKT,
                             order_type=TFTOrderType.ROD,
+                            custom_field=self.name,
                         ),
                     )
                     self.update_status(trade)
@@ -219,6 +220,7 @@ class SJTrader:
                     if with_price
                     else TFTStockPriceType.MKT,
                     order_type=TFTOrderType.ROD,
+                    custom_field=self.name,
                 ),
             )
             self.update_status(trade)
