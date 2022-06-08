@@ -23,8 +23,9 @@ accounts = api.login(**login_kws)
 sjtrader = sjtrade.SJTrader(api)
 ```
 
-### Preview Position
+### Set Position Filepath and Preview Position
 ``` python
+sjtrader.position_filepath = "position.txt"
 sjtrade.io.file.read_position(sjtrader.position_filepath)
 ```
 
