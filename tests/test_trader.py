@@ -523,7 +523,7 @@ def test_sim_sj_place_order(api: sj.Shioaji):
         contract,
         order,
     )
-    time.sleep(0.65)
+    time.sleep(0.55)
     assert trade.contract == contract
     # assert trade.order == order
     assert trade.order.seqno == "000001"

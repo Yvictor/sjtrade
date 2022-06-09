@@ -50,7 +50,7 @@ class Snapshot:
 class SimulationShioaji:
     def __init__(self, order_deal_handler: Callable[[OrderState, Dict], None]):
         self.order_callback = order_deal_handler
-        self.executor = ThreadPoolExecutor()
+        self.executor = ThreadPoolExecutor(max_workers=24)
         self.use_chars = (
             "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
         )
@@ -98,7 +98,8 @@ class SimulationShioaji:
             order,
             sj.order.OrderStatus(status=sj.order.Status.PreSubmitted),
         )
-        self.executor.submit(self.call_order_callback, trade, "New")
+        future = self.executor.submit(self.call_order_callback, trade, "New")
+        # future.result()
         return trade
 
     def cancel_order(self, trade: sj.order.Trade):
