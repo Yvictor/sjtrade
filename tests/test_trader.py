@@ -621,8 +621,9 @@ def test_sjtrader_sim_re_entry_order(
     position = sjtrader_entryed_sim.positions["1605"]
     sjtrader_entryed_sim.cancel_preorder_handler(position, tick)
     time.sleep(0.55)
+    assert sjtrader_entryed_sim.positions["1605"].cancel_preorder == True
     tick = TickSTKv1("1605", "2022-05-25 09:00:01", 35, False)
     sjtrader_entryed_sim.re_entry_order(position, tick)
     assert logger.info.called
-    time.sleep(0.55)
+    time.sleep(0.65)
     assert sjtrader_entryed_sim.positions["1605"].entry_order_quantity == -1
