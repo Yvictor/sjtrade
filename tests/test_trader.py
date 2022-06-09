@@ -1,4 +1,5 @@
 import pytest
+import time
 import datetime
 import loguru
 from pytest_mock import MockerFixture
@@ -6,7 +7,7 @@ import shioaji as sj
 
 from decimal import Decimal
 from dataclasses import dataclass
-from sjtrade.trader import Position, SJTrader
+from sjtrade.trader import Position, SJTrader, SimulationShioaji
 from shioaji.constant import (
     Action,
     TFTStockPriceType,
@@ -16,6 +17,7 @@ from shioaji.constant import (
     OrderState,
     TFTStockOrderLot,
     StockOrderCond,
+    StockFirstSell,
 )
 
 
@@ -30,6 +32,11 @@ class TickSTKv1:
 @pytest.fixture
 def sjtrader(api: sj.Shioaji) -> SJTrader:
     return SJTrader(api)
+
+
+@pytest.fixture
+def sjtrader_sim(api: sj.Shioaji) -> SJTrader:
+    return SJTrader(api, simulation=True)
 
 
 @pytest.fixture
@@ -48,6 +55,12 @@ def sjtrader_entryed(sjtrader: SJTrader, positions: dict):
     )
     res = sjtrader.place_entry_order(positions, 1.05)
     return sjtrader
+
+
+@pytest.fixture
+def sjtrader_entryed_sim(sjtrader_sim: SJTrader, positions: dict) -> SJTrader:
+    res = sjtrader_sim.place_entry_order(positions, 1.05)
+    return sjtrader_sim
 
 
 def test_sjtrader(api: sj.Shioaji):
@@ -111,6 +124,7 @@ def test_sjtrader_place_entry_order(
                 price_type=TFTStockPriceType.LMT,
                 order_type=TFTOrderType.ROD,
                 custom_field=sjtrader.name,
+                first_sell=StockFirstSell.Yes,
             ),
             status=sj.order.OrderStatus(status=sj.order.Status.PreSubmitted),
         ),
@@ -122,6 +136,7 @@ def test_sjtrader_place_entry_order(
                 action=Action.Sell,
                 price_type=TFTStockPriceType.LMT,
                 order_type=TFTOrderType.ROD,
+                first_sell=StockFirstSell.Yes,
                 custom_field=sjtrader.name,
             ),
             status=sj.order.OrderStatus(status=sj.order.Status.PreSubmitted),
@@ -206,6 +221,7 @@ def test_sjtrader_re_entry_order(
             action=Action.Sell,
             price_type=TFTStockPriceType.MKT,
             order_type=TFTOrderType.ROD,
+            first_sell=StockFirstSell.Yes,
             custom_field="dt1",
         ),
     )
@@ -453,10 +469,160 @@ def test_sjtrader_deal_handler(
     assert logger.info.called
 
 
-def test_sjtrader_update_status(sjtrader_entryed: SJTrader):
-
-    sjtrader_entryed.update_status(sjtrader_entryed.positions["1605"].entry_trades[0])
-
-    sjtrader_entryed.api._solace.update_status.assert_called_with(
-        sjtrader_entryed.positions["1605"].entry_trades[0].order.account, seqno=""
+def test_sim_sj_quote_callback(api: sj.Shioaji):
+    sim_api = SimulationShioaji(print)
+    contract = api.Contracts.Stocks["1605"]
+    order = sj.Order(
+        price=35,
+        quantity=1,
+        action=Action.Sell,
+        price_type=TFTStockPriceType.LMT,
+        order_type=TFTOrderType.ROD,
+        custom_field="dt1",
     )
+    sim_api.place_order(
+        contract,
+        order,
+    )
+    order = sj.Order(
+        price=34,
+        quantity=1,
+        action=Action.Sell,
+        price_type=TFTStockPriceType.LMT,
+        order_type=TFTOrderType.ROD,
+        custom_field="dt1",
+    )
+    sim_api.place_order(
+        contract,
+        order,
+    )
+    time.sleep(0.65)
+    tick = TickSTKv1("1605", "2022-05-25 09:00:01", 34.5, False)
+    assert len(sim_api.lmt_price_trades["1605"]) == 2
+    sim_api.quote_callback(Exchange.TSE, tick)
+    assert sim_api.snapshots["1605"].price == 34.5
+    assert len(sim_api.lmt_price_trades["1605"]) == 1
+    tick = TickSTKv1("1605", "2022-05-25 09:00:02", 36, False)
+    sim_api.quote_callback(Exchange.TSE, tick)
+    assert sim_api.snapshots["1605"].price == 36
+    assert "1605" not in sim_api.lmt_price_trades
+
+
+def test_sim_sj_place_order(api: sj.Shioaji):
+    sim_api = SimulationShioaji(print)
+    contract = api.Contracts.Stocks["1605"]
+    order = sj.Order(
+        price=41.35,
+        quantity=1,
+        action=Action.Sell,
+        price_type=TFTStockPriceType.MKT,
+        order_type=TFTOrderType.ROD,
+        custom_field="dt1",
+    )
+    trade = sim_api.place_order(
+        contract,
+        order,
+    )
+    time.sleep(0.55)
+    assert trade.contract == contract
+    # assert trade.order == order
+    assert trade.order.seqno == "000001"
+    assert trade.order.id == "c2c49415"
+    assert trade.order.ordno != ""
+    assert trade.status.status == "Submitted"
+    time.sleep(0.1)
+    assert trade.status.deal_quantity == 1
+
+
+def test_sim_sj_cancel_order(api: sj.Shioaji):
+    sim_api = SimulationShioaji(print)
+    contract = api.Contracts.Stocks["1605"]
+    order = sj.Order(
+        price=41.35,
+        quantity=1,
+        action=Action.Sell,
+        price_type=TFTStockPriceType.LMT,
+        order_type=TFTOrderType.ROD,
+        custom_field="dt1",
+    )
+    trade = sim_api.place_order(
+        contract,
+        order,
+    )
+    time.sleep(0.55)
+    trade = sim_api.cancel_order(trade)
+    time.sleep(0.55)
+    assert trade.status.status == sj.order.Status.Cancelled
+
+    order = sj.Order(
+        price=41.35,
+        quantity=1,
+        action=Action.Sell,
+        price_type=TFTStockPriceType.MKT,
+        order_type=TFTOrderType.ROD,
+        custom_field="dt1",
+    )
+    trade = sim_api.place_order(
+        contract,
+        order,
+    )
+    time.sleep(0.55)
+    trade = sim_api.cancel_order(trade)
+    time.sleep(0.55)
+    assert trade.status.status == sj.order.Status.Filled
+
+
+def test_sim_sj_update_status(api: sj.Shioaji):
+    sim_api = SimulationShioaji(print)
+    sim_api.update_status()
+
+
+def test_sjtrader_sim(api: sj.Shioaji):
+    sjtrader = SJTrader(api, simulation=True)
+    assert hasattr(sjtrader, "simulation_api")
+
+
+def test_sjtrader_sim_place_entry_order(
+    sjtrader_sim: SJTrader, logger: loguru._logger.Logger, positions: dict
+):
+    res = sjtrader_sim.place_entry_order(positions, 1.05)
+    logger.warning.assert_called_once()
+    sjtrader_sim.api.quote.subscribe.assert_has_calls(
+        [
+            (
+                (sjtrader_sim.api.Contracts.Stocks["1605"],),
+                dict(version=QuoteVersion.v1),
+            ),
+            (
+                (sjtrader_sim.api.Contracts.Stocks["6290"],),
+                dict(version=QuoteVersion.v1),
+            ),
+        ]
+    )
+    assert logger.info.call_count == 2
+    assert len(res) == 2
+
+
+def test_sjtrader_sim_cancel_preorder_handler(
+    sjtrader_entryed_sim: SJTrader, logger: loguru._logger.Logger
+):
+    tick = TickSTKv1("1605", "2022-05-25 08:45:01", 43.3, True)
+    sjtrader_entryed_sim.cancel_preorder_handler(Exchange.TSE, tick)
+
+    assert logger.info.called
+    time.sleep(0.55)
+    assert sjtrader_entryed_sim.positions["1605"].cancel_quantity == 1
+
+
+def test_sjtrader_sim_re_entry_order(
+    sjtrader_entryed_sim: SJTrader, logger: loguru._logger.Logger
+):
+    tick = TickSTKv1("1605", "2022-05-25 08:45:01", 43.3, True)
+    position = sjtrader_entryed_sim.positions["1605"]
+    sjtrader_entryed_sim.cancel_preorder_handler(position, tick)
+    time.sleep(0.55)
+    tick = TickSTKv1("1605", "2022-05-25 09:00:01", 35, False)
+    sjtrader_entryed_sim.re_entry_order(position, tick)
+    assert logger.info.called
+    time.sleep(0.55)
+    assert sjtrader_entryed_sim.positions["1605"].entry_order_quantity == -1

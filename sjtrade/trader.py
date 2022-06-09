@@ -1,6 +1,11 @@
+import time
+import random
+import datetime
 from dataclasses import dataclass, field
-from typing import Dict, List
+from typing import Callable, Dict, List
 from threading import Lock
+from concurrent.futures import ThreadPoolExecutor
+import xxhash
 import shioaji as sj
 
 from .utils import price_round, sleep_until
@@ -13,6 +18,7 @@ from shioaji.constant import (
     QuoteVersion,
     Exchange,
     OrderState,
+    StockFirstSell,
 )
 
 
@@ -34,8 +40,178 @@ class Position:
     lock: Lock = field(default_factory=Lock)
 
 
+@dataclass
+class Snapshot:
+    price: float
+    bid: float = 0
+    ask: float = 0
+
+
+class SimulationShioaji:
+    def __init__(self, order_deal_handler: Callable[[OrderState, Dict], None]):
+        self.order_callback = order_deal_handler
+        self.executor = ThreadPoolExecutor()
+        self.use_chars = (
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+        )
+        self.seqno_counter = 0
+        self.snapshots: Dict[str, Snapshot] = {}
+        self.lmt_price_trades: Dict[str, Dict[str, sj.order.Trade]] = {}
+        self.lock = Lock()
+
+    def quote_callback(self, exchange: Exchange, tick: sj.TickSTKv1):
+        if not tick.simtrade:
+            if tick.code in self.snapshots:
+                s = self.snapshots[tick.code]
+                s.price = tick.close
+            else:
+                self.snapshots[tick.code] = Snapshot(tick.close)
+            with self.lock:
+                if tick.code in self.lmt_price_trades:
+                    lmt_price_trades = self.lmt_price_trades[tick.code]
+                    pop_order_ids = []
+                    for order_id, trade in lmt_price_trades.items():
+                        if (
+                            trade.order.action == Action.Buy
+                            and tick.close <= trade.order.price
+                        ) or (
+                            trade.order.action == Action.Sell
+                            and tick.close >= trade.order.price
+                        ):
+                            deal_msg = self.gen_deal_msg(
+                                trade,
+                                quantity=trade.order.quantity,
+                                price=tick.close,
+                            )
+                            self.order_callback(OrderState.TFTDeal, deal_msg)
+                            pop_order_ids.append(order_id)
+                    for order_id in pop_order_ids:
+                        self.lmt_price_trades[tick.code].pop(order_id)
+                    if not lmt_price_trades:
+                        self.lmt_price_trades.pop(tick.code)
+
+    def place_order(
+        self, contract: sj.contracts.Contract, order: sj.order.TFTStockOrder
+    ):
+        trade = sj.order.Trade(
+            contract,
+            order,
+            sj.order.OrderStatus(status=sj.order.Status.PreSubmitted),
+        )
+        self.executor.submit(self.call_order_callback, trade, "New")
+        return trade
+
+    def cancel_order(self, trade: sj.order.Trade):
+        future = self.executor.submit(self.call_order_callback, trade, "Cancel")
+        future.result()
+        return trade
+
+    def update_status(self, account: sj.Account = None, trade: sj.order.Trade = None):
+        pass
+
+    def gen_order_msg(self, trade: sj.order.Trade, op_type: str):
+        if op_type == "New":
+            self.seqno_counter += 1
+            trade.order.seqno = f"{self.seqno_counter:0>6}"
+            trade.order.id = xxhash.xxh32_hexdigest(trade.order.seqno)
+            trade.order.ordno = ("").join(random.sample(self.use_chars, 5))
+            trade.status.status = sj.order.Status.Submitted
+            op_code = "00"
+        elif op_type == "Cancel":
+            if trade.status.status == sj.order.Status.Filled:
+                op_code = "11"
+                cancel_quantity = 0
+            else:
+                op_code = "00"
+                cancel_quantity = trade.order.quantity
+                if trade.contract.code in self.lmt_price_trades:
+                    trades = self.lmt_price_trades[trade.contract.code]
+                    if trade.order.id in trades:
+                        trades.pop(trade.order.id)
+                    if not trades:
+                        self.lmt_price_trades.pop(trade.contract.code)
+                trade.status.status = sj.order.Status.Cancelled
+        return {
+            "operation": {"op_type": op_type, "op_code": op_code, "op_msg": ""},
+            "order": {
+                "id": trade.order.id,
+                "seqno": trade.order.seqno,
+                "ordno": trade.order.ordno,
+                "action": trade.order.action,
+                "price": trade.order.price,
+                "quantity": trade.order.quantity,
+                "order_cond": trade.order.order_cond,
+                "order_lot": trade.order.order_lot,
+                "custom_field": trade.order.custom_field,
+                "order_type": trade.order.order_type,
+                "price_type": trade.order.price_type,
+            },
+            "status": {
+                "id": trade.order.id,
+                "exchange_ts": datetime.datetime.now().timestamp(),
+                "order_quantity": trade.order.quantity if op_type == "New" else 0,
+                "modified_price": 0.0,
+                "cancel_quantity": cancel_quantity if op_type == "Cancel" else 0,
+                "web_id": "137",
+            },
+            "contract": {
+                "security_type": trade.contract.security_type,
+                "exchange": trade.contract.exchange,
+                "code": trade.contract.code,
+                "symbol": trade.contract.symbol,
+                "name": trade.contract.name,
+                "currency": trade.contract.currency,
+            },
+        }
+
+    def gen_deal_msg(self, trade: sj.order.Trade, quantity: int, price: float):
+        trade.status.deal_quantity += quantity
+        trade.status.status = (
+            sj.order.Status.Filled
+            if quantity == trade.order.quantity
+            else sj.order.Status.PartFilled
+        )
+        return {
+            "trade_id": "12ab3456",
+            "exchange_seq": "123456",
+            "broker_id": "your_broker_id",
+            "account_id": "your_account_id",
+            "action": trade.order.action,
+            "code": trade.contract.code,
+            "order_cond": trade.order.order_cond,
+            "order_lot": trade.order.order_lot,
+            "price": price,
+            "quantity": quantity,
+            "web_id": "137",
+            "custom_field": trade.order.custom_field,
+            "ts": datetime.datetime.now().timestamp(),
+        }
+
+    def call_order_callback(self, trade: sj.order.Trade, op_type: str):
+        time.sleep(0.5)
+        order_msg = self.gen_order_msg(trade, op_type)
+        self.order_callback(OrderState.TFTOrder, order_msg)
+        time.sleep(0.1)
+        if trade.order.price_type == TFTStockPriceType.MKT:
+            if trade.status.status != sj.order.Status.Cancelled:
+                s = self.snapshots.get(trade.contract.code)
+                deal_msg = self.gen_deal_msg(
+                    trade,
+                    quantity=trade.order.quantity,
+                    price=s.price if s else trade.order.price,
+                )
+                self.order_callback(OrderState.TFTDeal, deal_msg)
+        else:
+            if trade.status.status != sj.order.Status.Cancelled:
+                with self.lock:
+                    if trade.contract.code in self.lmt_price_trades:
+                        self.lmt_price_trades[trade.contract.code][trade.order.id] = trade
+                    else:
+                        self.lmt_price_trades[trade.contract.code] = {trade.order.id: trade}
+
+
 class SJTrader:
-    def __init__(self, api: sj.Shioaji):
+    def __init__(self, api: sj.Shioaji, simulation: bool = False):
         self.api = api
         self.positions: Dict[str, Position] = {}
         self._stop_loss_pct = 0.09
@@ -44,6 +220,9 @@ class SJTrader:
         self.open_price = {}
         self._position_filepath = "position.txt"
         self.name = "dt1"
+        self.simulation = simulation
+        if simulation:
+            self.simulation_api = SimulationShioaji(self.order_deal_handler)
         self.api.quote.set_event_callback(self.sj_event_handel)
         # self.account = api.stock_account
         # self.entry_trades: Dict[str, sj.order.Trade] = {}
@@ -101,6 +280,10 @@ class SJTrader:
         self, positions: Dict[str, int], pct: float
     ) -> List[sj.order.Trade]:
         trades = []
+        if self.simulation:
+            api = self.simulation_api
+        else:
+            api = self.api
         for code, pos in positions.items():
             contract = self.api.Contracts.Stocks[code]
             if not contract:
@@ -122,16 +305,20 @@ class SJTrader:
                 self.api.quote.subscribe(contract, version=QuoteVersion.v1)
                 # TODO over 499 need handle
                 with self.positions[code].lock:
-                    trade = self.api.place_order(
+                    trade = api.place_order(
                         contract=self.api.Contracts.Stocks[code],
                         order=sj.Order(
                             price=price_round(
-                                self.api.Contracts.Stocks[code].reference * pct, pos > 0
+                                self.api.Contracts.Stocks[code].reference * pct,
+                                pos > 0,
                             ),
                             quantity=abs(pos),
                             action=Action.Buy if pos > 0 else Action.Sell,
                             price_type=TFTStockPriceType.LMT,
                             order_type=TFTOrderType.ROD,
+                            first_sell=StockFirstSell.No
+                            if pos > 0
+                            else StockFirstSell.Yes,
                             custom_field=self.name,
                         ),
                     )
@@ -139,11 +326,15 @@ class SJTrader:
                     self.positions[code].entry_trades.append(trade)
                     logger.info(f"{code}, {trade.order}")
                     # self.positions[code]["entry_order_quantity"] = pos
-        self.api.update_status()
+        api.update_status()
         return trades
 
     def cancel_preorder_handler(self, exchange: Exchange, tick: sj.TickSTKv1):
         position = self.positions[tick.code]
+        if self.simulation:
+            api = self.simulation_api
+        else:
+            api = self.api
         # 8:55 - 8:59:55
         if tick.simtrade:
             if position.quantity < 0 and tick.close == position.contract.limit_up:
@@ -151,7 +342,7 @@ class SJTrader:
                     position.cancel_preorder = True
                 for trade in self.positions[tick.code].entry_trades:
                     if trade.status.status != sj.order.Status.Cancelled:
-                        self.api.cancel_order(trade)
+                        api.cancel_order(trade)
                         logger.info(f"{trade.contract.code}, {trade.order}")
                         # check handle
                         # self.update_status(trade)
@@ -163,11 +354,15 @@ class SJTrader:
 
     def re_entry_order(self, position: Position, tick: sj.TickSTKv1):
         # 9:00 -> first
+        if self.simulation:
+            api = self.simulation_api
+        else:
+            api = self.api
         if not tick.simtrade:
             if tick.code not in self.open_price:
                 self.open_price[tick.code] = tick.close
                 if position.cancel_preorder and tick.close < position.stop_loss_price:
-                    trade = self.api.place_order(
+                    trade = api.place_order(
                         contract=position.contract,
                         order=sj.order.TFTStockOrder(
                             price=0,
@@ -175,13 +370,18 @@ class SJTrader:
                             action=Action.Buy if position.quantity > 0 else Action.Sell,
                             price_type=TFTStockPriceType.MKT,
                             order_type=TFTOrderType.ROD,
+                            first_sell=StockFirstSell.No
+                            if position.quantity > 0
+                            else StockFirstSell.Yes,
                             custom_field=self.name,
                         ),
                     )
                     logger.info(f"{trade.contract.code}, {trade.order}")
-                    self.update_status(trade)
+                    api.update_status(trade=trade)
 
     def intraday_handler(self, exchange: Exchange, tick: sj.TickSTKv1):
+        if self.simulation:
+            self.simulation_api.quote_callback(exchange, tick)
         position = self.positions[tick.code]
         self.re_entry_order(position, tick)
         # 9:00 -> 13:24:49 stop loss stop profit
@@ -217,13 +417,17 @@ class SJTrader:
                 )
 
     def place_cover_order(self, position: Position, with_price: bool = False):
+        if self.simulation:
+            api = self.simulation_api
+        else:
+            api = self.api
         if position.open_quantity + position.cover_order_quantity:
             action = (
                 Action.Buy
                 if position.open_quantity + position.cover_order_quantity < 0
                 else Action.Sell
             )
-            trade = self.api.place_order(
+            trade = api.place_order(
                 contract=position.contract,
                 order=sj.order.TFTStockOrder(
                     price=(
@@ -245,15 +449,19 @@ class SJTrader:
                 ),
             )
             logger.info(f"{trade.contract.code}, {trade.order}")
-            self.update_status(trade)
+            api.update_status(trade=trade)
             position.cover_trades.append(trade)
 
     def open_position_cover(self):
-        self.api.update_status()
+        if self.simulation:
+            api = self.simulation_api
+        else:
+            api = self.api
+        api.update_status()
         for code, position in self.positions.items():
             if position.cover_order_quantity:
                 for trade in position.cover_trades:
-                    self.api.cancel_order(trade)
+                    api.cancel_order(trade)
             # event wait cancel
             logger.info("start place cover order.")
             self.place_cover_order(position, with_price=True)
@@ -350,7 +558,3 @@ class SJTrader:
                     logger.info(
                         f"{position.contract.code}, entry order deal with {deal_quantity}, price: {deal_price}"
                     )
-
-    def update_status(self, trade: sj.order.Trade) -> sj.order.Trade:
-        self.api._solace.update_status(trade.order.account, seqno=trade.order.seqno)
-        return trade
