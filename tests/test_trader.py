@@ -78,6 +78,11 @@ def test_sjtrader_start(sjtrader: SJTrader, mocker: MockerFixture, positions: di
     )
 
 
+def test_sjtrader_sj_event_handler(sjtrader: SJTrader, logger: loguru._logger.Logger):
+    sjtrader.sj_event_handel(0, 0, "info", "event")
+    logger.info.assert_called_once()
+
+
 def test_sjtrader_place_entry_order(
     sjtrader: SJTrader, logger: loguru._logger.Logger, positions: dict
 ):
@@ -94,6 +99,7 @@ def test_sjtrader_place_entry_order(
             ((sjtrader.api.Contracts.Stocks["6290"],), dict(version=QuoteVersion.v1)),
         ]
     )
+    assert logger.info.call_count == 2
     sjtrader.api.update_status.assert_called_once()
     expected = [
         sj.order.Trade(
@@ -150,7 +156,7 @@ def test_sjtrader_place_entry_order(
 
 
 def test_sjtrader_cancel_preorder_handler(
-    sjtrader_entryed: SJTrader, mocker: MockerFixture
+    sjtrader_entryed: SJTrader, mocker: MockerFixture, logger: loguru._logger.Logger
 ):
     tick = TickSTKv1("1605", "2022-05-25 08:45:01", 43.3, True)
 
@@ -166,6 +172,7 @@ def test_sjtrader_cancel_preorder_handler(
     sjtrader_entryed.api.cancel_order.assert_called_once_with(
         sjtrader_entryed.positions["1605"].entry_trades[0]
     )
+    assert logger.info.called
     # TODO need single trade update status interface
     # sjtrader_entryed.update_status.assert_called_once_with(
     #     sjtrader_entryed.positions["1605"].entry_trades[0]
@@ -175,8 +182,7 @@ def test_sjtrader_cancel_preorder_handler(
 
 
 def test_sjtrader_re_entry_order(
-    sjtrader_entryed: SJTrader,
-    mocker: MockerFixture,
+    sjtrader_entryed: SJTrader, mocker: MockerFixture, logger: loguru._logger.Logger
 ):
     tick = TickSTKv1("1605", "2022-05-25 08:45:01", 43.3, True)
 
@@ -203,24 +209,31 @@ def test_sjtrader_re_entry_order(
             custom_field="dt1",
         ),
     )
+    assert logger.info.called
 
 
-def test_sjtrader_stop_profit(sjtrader_entryed: SJTrader, mocker: MockerFixture):
+def test_sjtrader_stop_profit(
+    sjtrader_entryed: SJTrader, mocker: MockerFixture, logger: loguru._logger.Logger
+):
     tick = TickSTKv1("1605", "2022-05-25 08:45:01", 35.5, False)
     position = sjtrader_entryed.positions["1605"]
     position.open_quantity = -1
     sjtrader_entryed.place_cover_order = mocker.MagicMock()
     sjtrader_entryed.stop_profit(position, tick)
     sjtrader_entryed.place_cover_order.assert_called_once()
+    assert logger.info.called
 
 
-def test_sjtrader_stop_loss(sjtrader_entryed: SJTrader, mocker: MockerFixture):
+def test_sjtrader_stop_loss(
+    sjtrader_entryed: SJTrader, mocker: MockerFixture, logger: loguru._logger.Logger
+):
     tick = TickSTKv1("1605", "2022-05-25 08:45:01", 43.3, False)
     position = sjtrader_entryed.positions["1605"]
     position.open_quantity = -1
     sjtrader_entryed.place_cover_order = mocker.MagicMock()
     sjtrader_entryed.stop_loss(position, tick)
     sjtrader_entryed.place_cover_order.assert_called_once()
+    assert logger.info.called
 
 
 def test_sjtrader_intraday_handler(sjtrader_entryed: SJTrader, mocker: MockerFixture):
@@ -234,7 +247,9 @@ def test_sjtrader_intraday_handler(sjtrader_entryed: SJTrader, mocker: MockerFix
     sjtrader_entryed.stop_loss.assert_called_once()
 
 
-def test_sjtrader_place_cover_order(sjtrader_entryed: SJTrader):
+def test_sjtrader_place_cover_order(
+    sjtrader_entryed: SJTrader, logger: loguru._logger.Logger
+):
     position = sjtrader_entryed.positions["1605"]
     position.open_quantity = -1
     sjtrader_entryed.place_cover_order(position)
@@ -249,15 +264,19 @@ def test_sjtrader_place_cover_order(sjtrader_entryed: SJTrader):
     #     )))
     # ])
     assert len(position.cover_trades) == 1
+    assert logger.info.called
 
 
-def test_sjtrader_open_position_cover(sjtrader_entryed: SJTrader):
+def test_sjtrader_open_position_cover(
+    sjtrader_entryed: SJTrader, logger: loguru._logger.Logger
+):
     position = sjtrader_entryed.positions["1605"]
     position.open_quantity = -1
     sjtrader_entryed.place_cover_order(position)
     order_msg = gen_sample_order_msg("1605", Action.Buy, 1, op_type="New", op_code="00")
     sjtrader_entryed.order_handler(order_msg, position)
     sjtrader_entryed.open_position_cover()
+    assert logger.info.called
 
 
 @pytest.fixture
@@ -391,7 +410,9 @@ def test_sjtrader_order_deal_handler_receive_deal_msg(
     )
 
 
-def test_sjtrader_order_handler(sjtrader_entryed: SJTrader):
+def test_sjtrader_order_handler(
+    sjtrader_entryed: SJTrader, logger: loguru._logger.Logger
+):
     position = sjtrader_entryed.positions["1605"]
     order_msg = gen_sample_order_msg(
         "1605", Action.Sell, 1, op_type="New", op_code="00"
@@ -414,9 +435,12 @@ def test_sjtrader_order_handler(sjtrader_entryed: SJTrader):
     )
     sjtrader_entryed.order_handler(order_msg, position)
     assert position.cover_order_quantity == 0
+    assert logger.info.called
 
 
-def test_sjtrader_deal_handler(sjtrader_entryed: SJTrader):
+def test_sjtrader_deal_handler(
+    sjtrader_entryed: SJTrader, logger: loguru._logger.Logger
+):
     position = sjtrader_entryed.positions["1605"]
     deal_msg = gen_sample_deal_msg("1605", Action.Sell, 1)
     sjtrader_entryed.deal_handler(deal_msg, position)
@@ -426,6 +450,7 @@ def test_sjtrader_deal_handler(sjtrader_entryed: SJTrader):
     sjtrader_entryed.deal_handler(deal_msg, position)
     assert position.open_quantity == 0
     assert position.cover_quantity == 1
+    assert logger.info.called
 
 
 def test_sjtrader_update_status(sjtrader_entryed: SJTrader):

@@ -44,6 +44,7 @@ class SJTrader:
         self.open_price = {}
         self._position_filepath = "position.txt"
         self.name = "dt1"
+        self.api.quote.set_event_callback(self.sj_event_handel)
         # self.account = api.stock_account
         # self.entry_trades: Dict[str, sj.order.Trade] = {}
 
@@ -91,6 +92,11 @@ class SJTrader:
     def position_filepath(self, v: str) -> float:
         self._position_filepath = v
 
+    def sj_event_handel(self, resp_code: int, event_code: int, info: str, event: str):
+        logger.info(
+            f"Response Code: {resp_code} | Event Code: {event_code} | Info: {info} | Event: {event}"
+        )
+
     def place_entry_order(
         self, positions: Dict[str, int], pct: float
     ) -> List[sj.order.Trade]:
@@ -131,6 +137,7 @@ class SJTrader:
                     )
                     trades.append(trade)
                     self.positions[code].entry_trades.append(trade)
+                    logger.info(f"{code}, {trade.order}")
                     # self.positions[code]["entry_order_quantity"] = pos
         self.api.update_status()
         return trades
@@ -145,6 +152,7 @@ class SJTrader:
                 for trade in self.positions[tick.code].entry_trades:
                     if trade.status.status != sj.order.Status.Cancelled:
                         self.api.cancel_order(trade)
+                        logger.info(f"{trade.contract.code}, {trade.order}")
                         # check handle
                         # self.update_status(trade)
                         # if trade.status.status == sj.order.Status.Cancelled:
@@ -170,6 +178,7 @@ class SJTrader:
                             custom_field=self.name,
                         ),
                     )
+                    logger.info(f"{trade.contract.code}, {trade.order}")
                     self.update_status(trade)
 
     def intraday_handler(self, exchange: Exchange, tick: sj.TickSTKv1):
@@ -183,17 +192,29 @@ class SJTrader:
         if not tick.simtrade:
             if position.open_quantity > 0 and tick.close >= position.stop_profit_price:
                 self.place_cover_order(position)
+                logger.info(
+                    f"{position.contract.code}, price: {tick.close} cross over {position.stop_profit_price}"
+                )
 
             if position.open_quantity < 0 and tick.close <= position.stop_profit_price:
                 self.place_cover_order(position)
+                logger.info(
+                    f"{position.contract.code}, price: {tick.close} cross under {position.stop_profit_price}"
+                )
 
     def stop_loss(self, position: Position, tick: sj.TickSTKv1):
         if not tick.simtrade:
             if position.open_quantity > 0 and tick.close <= position.stop_loss_price:
                 self.place_cover_order(position)
+                logger.info(
+                    f"{position.contract.code}, price: {tick.close} cross under {position.stop_loss_price}"
+                )
 
             if position.open_quantity < 0 and tick.close >= position.stop_loss_price:
                 self.place_cover_order(position)
+                logger.info(
+                    f"{position.contract.code}, price: {tick.close} cross over {position.stop_loss_price}"
+                )
 
     def place_cover_order(self, position: Position, with_price: bool = False):
         if position.open_quantity + position.cover_order_quantity:
@@ -223,6 +244,7 @@ class SJTrader:
                     custom_field=self.name,
                 ),
             )
+            logger.info(f"{trade.contract.code}, {trade.order}")
             self.update_status(trade)
             position.cover_trades.append(trade)
 
@@ -233,6 +255,7 @@ class SJTrader:
                 for trade in position.cover_trades:
                     self.api.cancel_order(trade)
             # event wait cancel
+            logger.info("start place cover order.")
             self.place_cover_order(position, with_price=True)
 
     def order_deal_handler(self, order_stats: OrderState, msg: Dict):
@@ -252,43 +275,81 @@ class SJTrader:
                     if msg["order"]["action"] == Action.Sell:
                         if position.quantity < 0:
                             position.entry_order_quantity -= order_quantity
+                            logger.info(
+                                f"{position.contract.code}, place entry order success with {order_quantity}"
+                            )
                         else:
                             position.cover_order_quantity -= order_quantity
+                            logger.info(
+                                f"{position.contract.code}, place cover order success with {order_quantity}"
+                            )
                     else:
                         if position.quantity < 0:
                             position.cover_order_quantity += order_quantity
+                            logger.info(
+                                f"{position.contract.code}, place cover order success with {order_quantity}"
+                            )
                         else:
                             position.entry_order_quantity += order_quantity
+                            logger.info(
+                                f"{position.contract.code}, place entry order success with {order_quantity}"
+                            )
                 else:
                     cancel_quantity = msg["status"].get("cancel_quantity", 0)
                     if msg["order"]["action"] == Action.Sell:
                         if position.quantity < 0:
                             position.entry_order_quantity += cancel_quantity
+                            logger.info(
+                                f"{position.contract.code}, canel entry order success with {cancel_quantity}"
+                            )
                         else:
                             position.cover_order_quantity += cancel_quantity
+                            logger.info(
+                                f"{position.contract.code}, canel cover order success with {cancel_quantity}"
+                            )
                     else:
                         if position.quantity < 0:
                             position.cover_order_quantity -= cancel_quantity
+                            logger.info(
+                                f"{position.contract.code}, canel cover order success with {cancel_quantity}"
+                            )
                         else:
                             position.entry_order_quantity -= cancel_quantity
+                            logger.info(
+                                f"{position.contract.code}, canel entry order success with {cancel_quantity}"
+                            )
                     position.cancel_quantity += cancel_quantity
         else:
             logger.error(f"Please Check: {msg}")
 
     def deal_handler(self, msg: Dict, position: Position):
         with position.lock:
+            deal_quantity = msg["quantity"]
+            deal_price = msg["price"]
             if msg["action"] == Action.Sell:
-                position.open_quantity -= msg["quantity"]
+                position.open_quantity -= deal_quantity
                 if position.quantity < 0:
-                    position.entry_quantity -= msg["quantity"]
+                    position.entry_quantity -= deal_quantity
+                    logger.info(
+                        f"{position.contract.code}, entry order deal with {deal_quantity}, price: {deal_price}"
+                    )
                 else:
-                    position.cover_quantity -= msg["quantity"]
+                    position.cover_quantity -= deal_quantity
+                    logger.info(
+                        f"{position.contract.code}, cover order deal with {deal_quantity}, price: {deal_price}"
+                    )
             else:
-                position.open_quantity += msg["quantity"]
+                position.open_quantity += deal_quantity
                 if position.quantity < 0:
-                    position.cover_quantity += msg["quantity"]
+                    position.cover_quantity += deal_quantity
+                    logger.info(
+                        f"{position.contract.code}, cover order deal with {deal_quantity}, price: {deal_price}"
+                    )
                 else:
-                    position.entry_quantity += msg["quantity"]
+                    position.entry_quantity += deal_quantity
+                    logger.info(
+                        f"{position.contract.code}, entry order deal with {deal_quantity}, price: {deal_price}"
+                    )
 
     def update_status(self, trade: sj.order.Trade) -> sj.order.Trade:
         self.api._solace.update_status(trade.order.account, seqno=trade.order.seqno)
