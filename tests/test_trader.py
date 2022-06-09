@@ -496,7 +496,7 @@ def test_sim_sj_quote_callback(api: sj.Shioaji):
         contract,
         order,
     )
-    time.sleep(0.65)
+    time.sleep(1.1)
     tick = TickSTKv1("1605", "2022-05-25 09:00:01", 34.5, False)
     assert len(sim_api.lmt_price_trades["1605"]) == 2
     sim_api.quote_callback(Exchange.TSE, tick)
@@ -523,7 +523,7 @@ def test_sim_sj_place_order(api: sj.Shioaji):
         contract,
         order,
     )
-    time.sleep(0.55)
+    time.sleep(0.65)
     assert trade.contract == contract
     # assert trade.order == order
     assert trade.order.seqno == "000001"
