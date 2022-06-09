@@ -64,6 +64,44 @@ File:      ~/.pyenv/versions/miniconda3-latest/lib/python3.7/site-packages/sjtra
 Type:      method
 ```
 
+### Simulation
+all order will be place as success and deal when price touch
+```
+api = sj.Shioaji()
+accounts = api.login(**login_kws)
+sjtrader = sjtrade.SJTrader(api, simulation=True)
+sjtrader.position_filepath = "position.txt"
+sjtrade.io.file.read_position(sjtrader.position_filepath)
+sjtrader.entry_pct = 0.05
+sjtrader.stop_profit_pct = 0.095
+sjtrader.stop_loss_pct = 0.09
+sjtrader.start()
+```
+
+### Notifications 
+``` bash
+pip install notifiers
+```
+
+#### Check notifiers
+``` python
+from notifiers import get_notifier
+notifier = get_notifier("telegram")
+TELECHATID = ""
+TELEBOT_TOKEN = ""
+PARAMS = {"chat_id": TELECHATID, "token": TELEBOT_TOKEN}
+notifier.notify(message="test", **PARAMS)
+```
+
+#### Check logger
+``` python
+from loguru import logger
+from notifiers.logging import NotificationHandler
+handler = NotificationHandler("telegram", defaults=PARAMS)
+logger.add(handler, level="INFO")
+logger.info("logger test")
+```
+
 
 ## Developer's guide
 
