@@ -325,7 +325,7 @@ class SJTrader:
                     )
                     trades.append(trade)
                     self.positions[code].entry_trades.append(trade)
-                    logger.info(f"{code}, {trade.order}")
+                    logger.info(f"{code} | {trade.order}")
                     # self.positions[code]["entry_order_quantity"] = pos
         api.update_status()
         return trades
@@ -344,7 +344,7 @@ class SJTrader:
                 for trade in self.positions[tick.code].entry_trades:
                     if trade.status.status != sj.order.Status.Cancelled:
                         api.cancel_order(trade)
-                        logger.info(f"{trade.contract.code}, {trade.order}")
+                        logger.info(f"{trade.contract.code} | {trade.order}")
                         # check handle
                         # self.update_status(trade)
                         # if trade.status.status == sj.order.Status.Cancelled:
@@ -377,7 +377,7 @@ class SJTrader:
                             custom_field=self.name,
                         ),
                     )
-                    logger.info(f"{trade.contract.code}, {trade.order}")
+                    logger.info(f"{trade.contract.code} | {trade.order}")
                     api.update_status(trade=trade)
 
     def intraday_handler(self, exchange: Exchange, tick: sj.TickSTKv1):
@@ -394,13 +394,13 @@ class SJTrader:
             if position.open_quantity > 0 and tick.close >= position.stop_profit_price:
                 self.place_cover_order(position)
                 logger.info(
-                    f"{position.contract.code}, price: {tick.close} cross over {position.stop_profit_price}"
+                    f"{position.contract.code} | price: {tick.close} cross over {position.stop_profit_price}"
                 )
 
             if position.open_quantity < 0 and tick.close <= position.stop_profit_price:
                 self.place_cover_order(position)
                 logger.info(
-                    f"{position.contract.code}, price: {tick.close} cross under {position.stop_profit_price}"
+                    f"{position.contract.code} | price: {tick.close} cross under {position.stop_profit_price}"
                 )
 
     def stop_loss(self, position: Position, tick: sj.TickSTKv1):
@@ -408,13 +408,13 @@ class SJTrader:
             if position.open_quantity > 0 and tick.close <= position.stop_loss_price:
                 self.place_cover_order(position)
                 logger.info(
-                    f"{position.contract.code}, price: {tick.close} cross under {position.stop_loss_price}"
+                    f"{position.contract.code} | price: {tick.close} cross under {position.stop_loss_price}"
                 )
 
             if position.open_quantity < 0 and tick.close >= position.stop_loss_price:
                 self.place_cover_order(position)
                 logger.info(
-                    f"{position.contract.code}, price: {tick.close} cross over {position.stop_loss_price}"
+                    f"{position.contract.code} | price: {tick.close} cross over {position.stop_loss_price}"
                 )
 
     def place_cover_order(self, position: Position, with_price: bool = False):
@@ -485,23 +485,23 @@ class SJTrader:
                         if position.quantity < 0:
                             position.entry_order_quantity -= order_quantity
                             logger.info(
-                                f"{position.contract.code}, place entry order success with {order_quantity}"
+                                f"{position.contract.code} | place short entry order with {order_quantity}"
                             )
                         else:
                             position.cover_order_quantity -= order_quantity
                             logger.info(
-                                f"{position.contract.code}, place cover order success with {order_quantity}"
+                                f"{position.contract.code} | place long cover order with {order_quantity}"
                             )
                     else:
                         if position.quantity < 0:
                             position.cover_order_quantity += order_quantity
                             logger.info(
-                                f"{position.contract.code}, place cover order success with {order_quantity}"
+                                f"{position.contract.code} | place short cover order with {order_quantity}"
                             )
                         else:
                             position.entry_order_quantity += order_quantity
                             logger.info(
-                                f"{position.contract.code}, place entry order success with {order_quantity}"
+                                f"{position.contract.code} | place long entry order with {order_quantity}"
                             )
                 else:
                     cancel_quantity = msg["status"].get("cancel_quantity", 0)
@@ -509,23 +509,23 @@ class SJTrader:
                         if position.quantity < 0:
                             position.entry_order_quantity += cancel_quantity
                             logger.info(
-                                f"{position.contract.code}, canel entry order success with {cancel_quantity}"
+                                f"{position.contract.code} | canceled short entry order with {cancel_quantity}"
                             )
                         else:
                             position.cover_order_quantity += cancel_quantity
                             logger.info(
-                                f"{position.contract.code}, canel cover order success with {cancel_quantity}"
+                                f"{position.contract.code} | canceled long cover order with {cancel_quantity}"
                             )
                     else:
                         if position.quantity < 0:
                             position.cover_order_quantity -= cancel_quantity
                             logger.info(
-                                f"{position.contract.code}, canel cover order success with {cancel_quantity}"
+                                f"{position.contract.code} | canel short cover order with {cancel_quantity}"
                             )
                         else:
                             position.entry_order_quantity -= cancel_quantity
                             logger.info(
-                                f"{position.contract.code}, canel entry order success with {cancel_quantity}"
+                                f"{position.contract.code} | canel long entry order with {cancel_quantity}"
                             )
                     position.cancel_quantity += cancel_quantity
         else:
@@ -540,22 +540,22 @@ class SJTrader:
                 if position.quantity < 0:
                     position.entry_quantity -= deal_quantity
                     logger.info(
-                        f"{position.contract.code}, entry order deal with {deal_quantity}, price: {deal_price}"
+                        f"{position.contract.code} | short entry order deal with {deal_quantity}, price: {deal_price}"
                     )
                 else:
                     position.cover_quantity -= deal_quantity
                     logger.info(
-                        f"{position.contract.code}, cover order deal with {deal_quantity}, price: {deal_price}"
+                        f"{position.contract.code} | long cover order deal with {deal_quantity}, price: {deal_price}"
                     )
             else:
                 position.open_quantity += deal_quantity
                 if position.quantity < 0:
                     position.cover_quantity += deal_quantity
                     logger.info(
-                        f"{position.contract.code}, cover order deal with {deal_quantity}, price: {deal_price}"
+                        f"{position.contract.code} | short cover order deal with {deal_quantity}, price: {deal_price}"
                     )
                 else:
                     position.entry_quantity += deal_quantity
                     logger.info(
-                        f"{position.contract.code}, entry order deal with {deal_quantity}, price: {deal_price}"
+                        f"{position.contract.code} | long entry order deal with {deal_quantity}, price: {deal_price}"
                     )
