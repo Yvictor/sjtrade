@@ -7,7 +7,7 @@ import shioaji as sj
 
 from decimal import Decimal
 from dataclasses import dataclass
-from sjtrade.trader import Position, SJTrader, SimulationShioaji
+from sjtrade.trader import Position, PositionCond, SJTrader, SimulationShioaji
 from shioaji.constant import (
     Action,
     TFTStockPriceType,
@@ -145,9 +145,11 @@ def test_sjtrader_place_entry_order(
     assert sjtrader.positions == {
         "1605": Position(
             contract=sjtrader.api.Contracts.Stocks["1605"],
-            quantity=-1,
-            stop_loss_price=42.7,
-            stop_profit_price=35.9,
+            cond=PositionCond(
+                quantity=-1,
+                stop_loss_price=42.7,
+                stop_profit_price=35.9,
+            ),
             entry_trades=[
                 expected[0],
             ],
@@ -156,9 +158,11 @@ def test_sjtrader_place_entry_order(
         ),
         "6290": Position(
             contract=sjtrader.api.Contracts.Stocks["6290"],
-            quantity=-3,
-            stop_loss_price=62.1,
-            stop_profit_price=52.2,
+            cond=PositionCond(
+                quantity=-3,
+                stop_loss_price=62.1,
+                stop_profit_price=52.2,
+            ),
             entry_trades=[
                 expected[1],
             ],
@@ -233,7 +237,7 @@ def test_sjtrader_stop_profit(
 ):
     tick = TickSTKv1("1605", "2022-05-25 08:45:01", 35.5, False)
     position = sjtrader_entryed.positions["1605"]
-    position.open_quantity = -1
+    position.status.open_quantity = -1
     sjtrader_entryed.place_cover_order = mocker.MagicMock()
     sjtrader_entryed.stop_profit(position, tick)
     sjtrader_entryed.place_cover_order.assert_called_once()
@@ -245,7 +249,7 @@ def test_sjtrader_stop_loss(
 ):
     tick = TickSTKv1("1605", "2022-05-25 08:45:01", 43.3, False)
     position = sjtrader_entryed.positions["1605"]
-    position.open_quantity = -1
+    position.status.open_quantity = -1
     sjtrader_entryed.place_cover_order = mocker.MagicMock()
     sjtrader_entryed.stop_loss(position, tick)
     sjtrader_entryed.place_cover_order.assert_called_once()
@@ -267,11 +271,12 @@ def test_sjtrader_place_cover_order(
     sjtrader_entryed: SJTrader, logger: loguru._logger.Logger
 ):
     position = sjtrader_entryed.positions["1605"]
-    position.open_quantity = -1
+    position.status.open_quantity = -1
     sjtrader_entryed.place_cover_order(position)
     order_msg = gen_sample_order_msg("1605", Action.Buy, 1, op_type="New", op_code="00")
     sjtrader_entryed.order_handler(order_msg, position)
-    assert position.cover_order_quantity == 1
+    assert position.status.cover_order_quantity == 1
+    position.cover_trades[0].order.price == 43.3
     # TODO assert called once with
     # sjtrader_entryed.api.place_order.assert_has_calls([
     #     ((), dict(contract=position.contract, order=sj.order.TFTStockOrder(
@@ -434,23 +439,23 @@ def test_sjtrader_order_handler(
         "1605", Action.Sell, 1, op_type="New", op_code="00"
     )
     sjtrader_entryed.order_handler(order_msg, position)
-    assert position.entry_order_quantity == -1
+    assert position.status.entry_order_quantity == -1
 
     order_msg = gen_sample_order_msg(
         "1605", Action.Sell, 1, op_type="Cancel", op_code="00"
     )
     sjtrader_entryed.order_handler(order_msg, position)
-    assert position.entry_order_quantity == 0
+    assert position.status.entry_order_quantity == 0
 
     order_msg = gen_sample_order_msg("1605", Action.Buy, 1, op_type="New", op_code="00")
     sjtrader_entryed.order_handler(order_msg, position)
-    assert position.cover_order_quantity == 1
+    assert position.status.cover_order_quantity == 1
 
     order_msg = gen_sample_order_msg(
         "1605", Action.Buy, 1, op_type="Cancel", op_code="00"
     )
     sjtrader_entryed.order_handler(order_msg, position)
-    assert position.cover_order_quantity == 0
+    assert position.status.cover_order_quantity == 0
     assert logger.info.called
 
 
@@ -460,12 +465,12 @@ def test_sjtrader_deal_handler(
     position = sjtrader_entryed.positions["1605"]
     deal_msg = gen_sample_deal_msg("1605", Action.Sell, 1)
     sjtrader_entryed.deal_handler(deal_msg, position)
-    assert position.open_quantity == -1
-    assert position.entry_quantity == -1
+    assert position.status.open_quantity == -1
+    assert position.status.entry_quantity == -1
     deal_msg = gen_sample_deal_msg("1605", Action.Buy, 1)
     sjtrader_entryed.deal_handler(deal_msg, position)
-    assert position.open_quantity == 0
-    assert position.cover_quantity == 1
+    assert position.status.open_quantity == 0
+    assert position.status.cover_quantity == 1
     assert logger.info.called
 
 
@@ -611,7 +616,7 @@ def test_sjtrader_sim_cancel_preorder_handler(
 
     assert logger.info.called
     time.sleep(0.55)
-    assert sjtrader_entryed_sim.positions["1605"].cancel_quantity == 1
+    assert sjtrader_entryed_sim.positions["1605"].status.cancel_quantity == 1
 
 
 def test_sjtrader_sim_re_entry_order(
@@ -621,9 +626,9 @@ def test_sjtrader_sim_re_entry_order(
     position = sjtrader_entryed_sim.positions["1605"]
     sjtrader_entryed_sim.cancel_preorder_handler(position, tick)
     time.sleep(0.55)
-    assert sjtrader_entryed_sim.positions["1605"].cancel_preorder == True
+    assert sjtrader_entryed_sim.positions["1605"].status.cancel_preorder == True
     tick = TickSTKv1("1605", "2022-05-25 09:00:01", 35, False)
     sjtrader_entryed_sim.re_entry_order(position, tick)
     assert logger.info.called
     time.sleep(0.65)
-    assert sjtrader_entryed_sim.positions["1605"].entry_order_quantity == -1
+    assert sjtrader_entryed_sim.positions["1605"].status.entry_order_quantity == -1
