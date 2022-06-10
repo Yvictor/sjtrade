@@ -1,11 +1,14 @@
 # sjtrade
-shioaji day trade 
 
 [![PyPI](https://img.shields.io/pypi/v/sjtrade)](https://pypi.org/project/sjtrade/)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![Test and Deploy](https://github.com/Yvictor/sjtrade/actions/workflows/test-deploy.yml/badge.svg)](https://github.com/Yvictor/sjtrade/actions/workflows/test-deploy.yml)
 [![codecov](https://codecov.io/gh/Yvictor/sjtrade/branch/master/graph/badge.svg?token=hHZzwJEPyt)](https://codecov.io/gh/Yvictor/sjtrade)
 [![Telegram](https://img.shields.io/badge/chat-%20telegram-blue.svg)](https://t.me/joinchat/973EyAQlrfthZTk1)
+[![Open Tutorial In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/yvictor/sjtrade/blob/master/tutorial/quickstart.ipynb)
+
+shioaji day trading demo package
+
 
 ## Install
 ```
