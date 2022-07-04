@@ -30,7 +30,7 @@ test = [
     "black",
 	"pytest>=7.1.2",
     "pytest-freezegun",
-    "pytest-mock",
+    "pytest-mock==3.7.0",
     "pytest-cov",
     "codecov",
 ]
