@@ -1,6 +1,7 @@
 import math
 import time
 import datetime
+from typing import List, Union
 
 
 def price_ceil(price: float) -> float:
@@ -27,10 +28,22 @@ def price_round(price: float, up: bool = False):
     )
 
 
-def sleep_until(hour: int, minute: int, sec: int = 0) -> None:
+def quantity_split(quantity: float, threshold: int) -> List[int]:
+    return [threshold if quantity > 0 else -threshold] * (
+        abs(quantity) // threshold
+    ) + [
+        (abs(quantity) % threshold) * (1 if quantity > 0 else -1),
+    ]
+
+
+def sleep_until(t: Union[datetime.time, tuple]) -> None:
+    if isinstance(t, tuple):
+        t = datetime.time(*t)
     now = datetime.datetime.utcnow() + datetime.timedelta(hours=8)
     d = datetime.timedelta(days=1) if now.hour > 13 else datetime.timedelta(days=0)
-    until_time = datetime.datetime(now.year, now.month, now.day, hour, minute, sec) + d
+    until_time = (
+        datetime.datetime(now.year, now.month, now.day, t.hour, t.minute, t.second) + d
+    )
     delta = until_time - now
     delta_sec = delta.total_seconds()
     if delta_sec > 0:

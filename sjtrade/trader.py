@@ -2,13 +2,13 @@ import time
 import random
 import datetime
 from dataclasses import dataclass, field
-from typing import Callable, Dict, List
+from typing import Callable, Dict, List, Union
 from threading import Lock
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
 import xxhash
 import shioaji as sj
 
-from .utils import price_round, sleep_until
+from .utils import price_round, quantity_split, sleep_until
 from .io.file import read_position
 from loguru import logger
 from shioaji.constant import (
@@ -248,33 +248,36 @@ class SJTrader:
 
     def start(
         self,
-        entry_time: tuple = (8, 45),
-        cancel_preorder_time: tuple = (8, 54, 59),
-        intraday_handler_time: tuple = (8, 59, 55),
-        cover_time: tuple = (13, 25, 59),
+        entry_time: datetime.time = datetime.time(8, 45),
+        cancel_preorder_time: datetime.time = datetime.time(8, 54, 59),
+        intraday_handler_time: datetime.time = datetime.time(8, 59, 55),
+        cover_time: datetime.time = datetime.time(13, 25, 59),
     ):
         positions = self.read_position_func(self._position_filepath)
-        entry_future = self.executor.submit(
-            self.run_at, entry_time, self.place_entry_order, positions, self.entry_pct
+        entry_future = self.executor_on_time(
+            entry_time, self.place_entry_positions, positions, self.entry_pct
         )
-        self.executor.submit(
-            self.run_at,
+        self.executor_on_time(
             cancel_preorder_time,
             self.set_on_tick_handler,
             self.cancel_preorder_handler,
         )
-        self.executor.submit(
-            self.run_at,
+        self.executor_on_time(
             intraday_handler_time,
             self.set_on_tick_handler,
             self.intraday_handler,
         )
-        self.executor.submit(self.run_at, cover_time, self.open_position_cover)
+        self.executor_on_time(cover_time, self.open_position_cover)
         return entry_future
 
-    def run_at(self, t: tuple, func: Callable, *args, **kwargs):
-        sleep_until(*t)
+    def run_at(self, t: Union[datetime.time, tuple], func: Callable, *args, **kwargs):
+        sleep_until(t)
         return func(*args, **kwargs)
+
+    def executor_on_time(
+        self, t: Union[datetime.time, tuple], func: Callable, *args, **kwargs
+    ) -> Future:
+        return self.executor.submit(self.run_at, t, func, *args, **kwargs)
 
     def set_on_tick_handler(self, func: Callable[[Exchange, sj.TickSTKv1], None]):
         self.api.quote.set_on_tick_stk_v1_callback(func)
@@ -317,43 +320,44 @@ class SJTrader:
         )
 
     def place_entry_order(
-        self, positions: Dict[str, int], pct: float
-    ) -> List[sj.order.Trade]:
-        trades = []
-        if self.simulation:
-            api = self.simulation_api
+        self,
+        code: str,
+        pos: int,
+        entry_pct: float,
+        stop_profit_pct: float,
+        stop_loss_pct: float,
+    ):
+        api = self.simulation_api if self.simulation else self.api
+        contract = self.api.Contracts.Stocks[code]
+        if not contract:
+            logger.warning(f"Code: {code} not exist in TW Stock.")
         else:
-            api = self.api
-        for code, pos in positions.items():
-            contract = self.api.Contracts.Stocks[code]
-            if not contract:
-                logger.warning(f"Code: {code} not exist in TW Stock.")
-            else:
-                # TODO abstract func
-                stop_loss_price = contract.reference * (
-                    1 + (-1 if pos > 0 else 1) * (self._stop_loss_pct)
-                )
-                stop_profit_price = contract.reference * (
-                    1 + (1 if pos > 0 else -1) * (self._stop_profit_pct)
-                )
-                entry_price = contract.reference * (1 + (-1 if pos > 0 else 1) * pct)
-                self.positions[code] = Position(
-                    contract=contract,
-                    cond=PositionCond(
-                        quantity=positions[code],
-                        entry_price=price_round(entry_price, pos > 0),
-                        stop_loss_price=price_round(stop_loss_price, pos > 0),
-                        stop_profit_price=price_round(stop_profit_price, pos < 0),
-                    ),
-                )
-                self.api.quote.subscribe(contract, version=QuoteVersion.v1)
-                # TODO over 499 need handle
-                with self.positions[code].lock:
+            # TODO abstract func
+            stop_loss_price = contract.reference * (
+                1 + (-1 if pos > 0 else 1) * (stop_loss_pct)
+            )
+            stop_profit_price = contract.reference * (
+                1 + (1 if pos > 0 else -1) * (stop_profit_pct)
+            )
+            entry_price = contract.reference * (1 + (-1 if pos > 0 else 1) * entry_pct)
+            self.positions[code] = Position(
+                contract=contract,
+                cond=PositionCond(
+                    quantity=pos,
+                    entry_price=price_round(entry_price, pos > 0),
+                    stop_loss_price=price_round(stop_loss_price, pos > 0),
+                    stop_profit_price=price_round(stop_profit_price, pos < 0),
+                ),
+            )
+            self.api.quote.subscribe(contract, version=QuoteVersion.v1)
+            quantity_s = quantity_split(pos, threshold=499)
+            with self.positions[code].lock:
+                for q in quantity_s:
                     trade = api.place_order(
                         contract=self.api.Contracts.Stocks[code],
                         order=sj.Order(
                             price=self.positions[code].cond.entry_price,
-                            quantity=abs(pos),
+                            quantity=abs(q),
                             action=Action.Buy if pos > 0 else Action.Sell,
                             price_type=TFTStockPriceType.LMT,
                             order_type=TFTOrderType.ROD,
@@ -363,12 +367,19 @@ class SJTrader:
                             custom_field=self.name,
                         ),
                     )
-                    trades.append(trade)
                     self.positions[code].entry_trades.append(trade)
                     logger.info(f"{code} | {trade.order}")
-                    # self.positions[code]["entry_order_quantity"] = pos
+
+    def place_entry_positions(
+        self, positions: Dict[str, int], pct: float
+    ) -> Dict[str, Position]:
+        api = self.simulation_api if self.simulation else self.api
+        for code, pos in positions.items():
+            self.place_entry_order(
+                code, pos, pct, self.stop_profit_pct, self.stop_loss_pct
+            )
         api.update_status()
-        return trades
+        return self.positions
 
     def cancel_preorder_handler(self, exchange: Exchange, tick: sj.TickSTKv1):
         position = self.positions[tick.code]
@@ -479,38 +490,35 @@ class SJTrader:
             api = self.simulation_api
         else:
             api = self.api
-        if position.status.open_quantity + position.status.cover_order_quantity:
-            action = (
-                Action.Buy
-                if position.status.open_quantity + position.status.cover_order_quantity
-                < 0
-                else Action.Sell
-            )
-            trade = api.place_order(
-                contract=position.contract,
-                order=sj.order.TFTStockOrder(
-                    price=(
-                        position.contract.limit_up
-                        if action == Action.Buy
-                        else position.contract.limit_down
-                    )
-                    if with_price
-                    else 0,
-                    quantity=abs(
-                        position.status.open_quantity
-                        + position.status.cover_order_quantity
+        cover_quantity = (
+            position.status.open_quantity + position.status.cover_order_quantity
+        )
+        if cover_quantity:
+            action = Action.Buy if cover_quantity < 0 else Action.Sell
+            quantity_s = quantity_split(cover_quantity, threshold=499)
+            for q in quantity_s:
+                trade = api.place_order(
+                    contract=position.contract,
+                    order=sj.order.TFTStockOrder(
+                        price=(
+                            position.contract.limit_up
+                            if action == Action.Buy
+                            else position.contract.limit_down
+                        )
+                        if with_price
+                        else 0,
+                        quantity=abs(q),
+                        action=action,
+                        price_type=TFTStockPriceType.LMT
+                        if with_price
+                        else TFTStockPriceType.MKT,
+                        order_type=TFTOrderType.ROD,
+                        custom_field=self.name,
                     ),
-                    action=action,
-                    price_type=TFTStockPriceType.LMT
-                    if with_price
-                    else TFTStockPriceType.MKT,
-                    order_type=TFTOrderType.ROD,
-                    custom_field=self.name,
-                ),
-            )
-            logger.info(f"{trade.contract.code} | {trade.order}")
-            api.update_status(trade=trade)
-            position.cover_trades.append(trade)
+                )
+                logger.info(f"{trade.contract.code} | {trade.order}")
+                position.cover_trades.append(trade)
+                api.update_status(trade=trade)
 
     def open_position_cover(self):
         if self.simulation:

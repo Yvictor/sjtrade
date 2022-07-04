@@ -53,13 +53,13 @@ def sjtrader_entryed(sjtrader: SJTrader, positions: dict):
             sj.order.OrderStatus(status=sj.order.Status.PreSubmitted),
         )
     )
-    res = sjtrader.place_entry_order(positions, 0.05)
+    res = sjtrader.place_entry_positions(positions, 0.05)
     return sjtrader
 
 
 @pytest.fixture
 def sjtrader_entryed_sim(sjtrader_sim: SJTrader, positions: dict) -> SJTrader:
-    res = sjtrader_sim.place_entry_order(positions, 0.05)
+    res = sjtrader_sim.place_entry_positions(positions, 0.05)
     return sjtrader_sim
 
 
@@ -87,7 +87,12 @@ def test_sjtrader_start(sjtrader: SJTrader, mocker: MockerFixture, positions: di
         [((sjtrader.cancel_preorder_handler,),), ((sjtrader.intraday_handler,),)]
     )
     sleep_until_mock.assert_has_calls(
-        [((8, 45),), ((8, 54, 59),), ((8, 59, 55),), ((13, 25, 59),)]
+        [
+            mocker.call(datetime.time(8, 45)),
+            mocker.call(datetime.time(8, 54, 59)),
+            mocker.call(datetime.time(8, 59, 55)),
+            mocker.call(datetime.time(13, 25, 59)),
+        ]
     )
 
 
@@ -104,7 +109,7 @@ def test_sjtrader_place_entry_order(
     )
     sjtrader.stop_loss_pct = 0.085
     sjtrader.stop_profit_pct = 0.09
-    res = sjtrader.place_entry_order(positions, 0.05)
+    res = sjtrader.place_entry_positions(positions, 0.05)
     logger.warning.assert_called_once()
     sjtrader.api.quote.subscribe.assert_has_calls(
         [
@@ -173,7 +178,7 @@ def test_sjtrader_place_entry_order(
         ),
     }
     assert len(res) == 2
-    assert res == expected
+    assert res == sjtrader.positions
 
 
 def test_sjtrader_cancel_preorder_handler(
@@ -592,7 +597,7 @@ def test_sjtrader_sim(api: sj.Shioaji):
 def test_sjtrader_sim_place_entry_order(
     sjtrader_sim: SJTrader, logger: loguru._logger.Logger, positions: dict
 ):
-    res = sjtrader_sim.place_entry_order(positions, 0.05)
+    res = sjtrader_sim.place_entry_positions(positions, 0.05)
     logger.warning.assert_called_once()
     sjtrader_sim.api.quote.subscribe.assert_has_calls(
         [

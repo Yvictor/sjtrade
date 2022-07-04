@@ -1,6 +1,14 @@
+import datetime
+from typing import List
 import pytest
 from pytest_mock import MockerFixture
-from sjtrade.utils import price_ceil, price_floor, price_round, sleep_until
+from sjtrade.utils import (
+    price_ceil,
+    price_floor,
+    price_round,
+    quantity_split,
+    sleep_until,
+)
 
 
 @pytest.mark.parametrize(
@@ -60,8 +68,43 @@ def test_price_floor(input: float, expected: float):
 def test_price_round(price: float, up: bool, expected: float):
     assert price_round(price, up) == expected
 
+
 @pytest.mark.freeze_time("2022-06-06 00:30:00 UTC")
 def test_sleep_until(mocker: MockerFixture):
     sleep_mock = mocker.patch("time.sleep")
-    sleep_until(9, 0, 1)
-    sleep_mock.assert_called_once_with(30*60 + 1)
+    sleep_until(datetime.time(9, 0, 1))
+    sleep_mock.assert_called_once_with(30 * 60 + 1)
+
+
+@pytest.mark.freeze_time("2022-06-06 00:30:00 UTC")
+def test_sleep_until(mocker: MockerFixture):
+    sleep_mock = mocker.patch("time.sleep")
+    sleep_until((9, 0, 1))
+    sleep_mock.assert_called_once_with(30 * 60 + 1)
+
+
+@pytest.mark.parametrize(
+    ("quantity", "threshold", "expected"),
+    [
+        (
+            497,
+            499,
+            [
+                497,
+            ],
+        ),
+        (
+            503,
+            499,
+            [499, 4],
+        ),
+        (
+            -1024,
+            499,
+            [-499, -499, -26],
+        ),
+    ],
+)
+def test_quantiy_split(quantity: int, threshold: int, expected: List[int]):
+    res = quantity_split(quantity, threshold)
+    assert res == expected
