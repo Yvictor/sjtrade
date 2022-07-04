@@ -77,11 +77,11 @@ def test_sjtrader(api: sj.Shioaji):
 
 
 def test_sjtrader_start(sjtrader: SJTrader, mocker: MockerFixture, positions: dict):
-    read_position_mock = mocker.patch("sjtrade.trader.read_position")
-    read_position_mock.return_value = positions
+    sjtrader.read_position_func = mocker.MagicMock()
+    sjtrader.read_position_func.return_value = positions
     sleep_until_mock = mocker.patch("sjtrade.trader.sleep_until")
     sjtrader.start()
-    read_position_mock.assert_called_once()
+    sjtrader.read_position_func.assert_called_once()
     sjtrader.api.set_order_callback.assert_called_once_with(sjtrader.order_deal_handler)
     sjtrader.api.quote.set_on_tick_stk_v1_callback.assert_has_calls(
         [((sjtrader.cancel_preorder_handler,),), ((sjtrader.intraday_handler,),)]
