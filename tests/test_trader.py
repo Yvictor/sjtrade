@@ -152,9 +152,9 @@ def test_sjtrader_place_entry_order(
             contract=sjtrader.api.Contracts.Stocks["1605"],
             cond=PositionCond(
                 quantity=-1,
-                entry_price=41.35,
-                stop_loss_price=42.7,
-                stop_profit_price=35.9,
+                entry_price={41.35: -1},
+                stop_loss_price={42.7: -1},
+                stop_profit_price={35.9: -1},
             ),
             entry_trades=[
                 expected[0],
@@ -166,9 +166,9 @@ def test_sjtrader_place_entry_order(
             contract=sjtrader.api.Contracts.Stocks["6290"],
             cond=PositionCond(
                 quantity=-3,
-                entry_price=60.1,
-                stop_loss_price=62.1,
-                stop_profit_price=52.2,
+                entry_price={60.1: -3},
+                stop_loss_price={62.1: -3},
+                stop_profit_price={52.2: -3},
             ),
             entry_trades=[
                 expected[1],
