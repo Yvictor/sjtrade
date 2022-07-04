@@ -1,6 +1,6 @@
 import pytest
 from pytest_mock import MockFixture
-from sjtrade.io.file import read_position
+from sjtrade.io.file import read_csv_position, read_position
 
 
 def test_read_position(mocker: MockFixture):
@@ -25,3 +25,15 @@ def test_read_position(mocker: MockFixture):
 def test_read_position_notfile():
     with pytest.raises(FileNotFoundError):
         read_position("")
+
+
+def test_read_csv_position(mocker: MockFixture):
+    mocker.patch("pathlib.Path.is_file").return_value = True
+    mocker.patch("pathlib.Path.exists").return_value = True
+    mocker.patch(
+        "pathlib.Path.read_text"
+    ).return_value = (
+        "標的,張數,停損檔數,尾盤鋪單%數\n1319,-8,3,1\n1539,-9,3,1\n1760,-9,4,2\n1795,-9,2,1\n"
+    )
+    res = read_csv_position("position.csv")
+    assert res == {"1319": -8, "1539": -9, "1760": -9, "1795": -9}

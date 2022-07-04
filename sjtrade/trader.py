@@ -242,6 +242,7 @@ class SJTrader:
             self.simulation_api = SimulationShioaji(self.order_deal_handler)
         self.api.set_order_callback(self.order_deal_handler)
         self.api.quote.set_event_callback(self.sj_event_handel)
+        self.read_position_func = read_position
         # self.account = api.stock_account
         # self.entry_trades: Dict[str, sj.order.Trade] = {}
 
@@ -252,7 +253,7 @@ class SJTrader:
         intraday_handler_time: tuple = (8, 59, 55),
         cover_time: tuple = (13, 25, 59),
     ):
-        positions = read_position(self._position_filepath)
+        positions = self.read_position_func(self._position_filepath)
         entry_future = self.executor.submit(
             self.run_at, entry_time, self.place_entry_order, positions, self.entry_pct
         )

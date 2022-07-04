@@ -32,6 +32,14 @@ sjtrader.position_filepath = "position.txt"
 sjtrade.io.file.read_position(sjtrader.position_filepath)
 ```
 
+### Set Custom Position FileReader
+``` python
+from sjtrade.io.file import read_csv_position
+sjtrader.read_position_func = read_csv_position
+sjtrader.position_filepath = "position.csv"
+sjtrader.read_position_func(sjtrader.position_filepath)
+```
+
 ### Set entry_pct stop_profit_pct stop_loss_pct
 ``` python
 sjtrader.entry_pct = 0.05
