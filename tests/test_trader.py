@@ -53,13 +53,13 @@ def sjtrader_entryed(sjtrader: SJTrader, positions: dict):
             sj.order.OrderStatus(status=sj.order.Status.PreSubmitted),
         )
     )
-    res = sjtrader.place_entry_order(positions, 1.05)
+    res = sjtrader.place_entry_order(positions, 0.05)
     return sjtrader
 
 
 @pytest.fixture
 def sjtrader_entryed_sim(sjtrader_sim: SJTrader, positions: dict) -> SJTrader:
-    res = sjtrader_sim.place_entry_order(positions, 1.05)
+    res = sjtrader_sim.place_entry_order(positions, 0.05)
     return sjtrader_sim
 
 
@@ -104,7 +104,7 @@ def test_sjtrader_place_entry_order(
     )
     sjtrader.stop_loss_pct = 0.085
     sjtrader.stop_profit_pct = 0.09
-    res = sjtrader.place_entry_order(positions, 1.05)
+    res = sjtrader.place_entry_order(positions, 0.05)
     logger.warning.assert_called_once()
     sjtrader.api.quote.subscribe.assert_has_calls(
         [
@@ -147,6 +147,7 @@ def test_sjtrader_place_entry_order(
             contract=sjtrader.api.Contracts.Stocks["1605"],
             cond=PositionCond(
                 quantity=-1,
+                entry_price=41.35,
                 stop_loss_price=42.7,
                 stop_profit_price=35.9,
             ),
@@ -160,6 +161,7 @@ def test_sjtrader_place_entry_order(
             contract=sjtrader.api.Contracts.Stocks["6290"],
             cond=PositionCond(
                 quantity=-3,
+                entry_price=60.1,
                 stop_loss_price=62.1,
                 stop_profit_price=52.2,
             ),
@@ -590,7 +592,7 @@ def test_sjtrader_sim(api: sj.Shioaji):
 def test_sjtrader_sim_place_entry_order(
     sjtrader_sim: SJTrader, logger: loguru._logger.Logger, positions: dict
 ):
-    res = sjtrader_sim.place_entry_order(positions, 1.05)
+    res = sjtrader_sim.place_entry_order(positions, 0.05)
     logger.warning.assert_called_once()
     sjtrader_sim.api.quote.subscribe.assert_has_calls(
         [

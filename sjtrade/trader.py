@@ -25,6 +25,7 @@ from shioaji.constant import (
 @dataclass
 class PositionCond:
     quantity: int
+    entry_price: float
     stop_loss_price: float
     stop_profit_price: float
 
@@ -334,10 +335,12 @@ class SJTrader:
                 stop_profit_price = contract.reference * (
                     1 + (1 if pos > 0 else -1) * (self._stop_profit_pct)
                 )
+                entry_price = contract.reference * (1 + (-1 if pos > 0 else 1) * pct)
                 self.positions[code] = Position(
                     contract=contract,
                     cond=PositionCond(
                         quantity=positions[code],
+                        entry_price=price_round(entry_price, pos > 0),
                         stop_loss_price=price_round(stop_loss_price, pos > 0),
                         stop_profit_price=price_round(stop_profit_price, pos < 0),
                     ),
@@ -348,10 +351,7 @@ class SJTrader:
                     trade = api.place_order(
                         contract=self.api.Contracts.Stocks[code],
                         order=sj.Order(
-                            price=price_round(
-                                self.api.Contracts.Stocks[code].reference * pct,
-                                pos > 0,
-                            ),
+                            price=self.positions[code].cond.entry_price,
                             quantity=abs(pos),
                             action=Action.Buy if pos > 0 else Action.Sell,
                             price_type=TFTStockPriceType.LMT,
@@ -377,10 +377,7 @@ class SJTrader:
             api = self.api
         # 8:55 - 8:59:55
         if tick.simtrade:
-            if (
-                position.cond.quantity < 0
-                and tick.close == position.contract.limit_up
-            ):
+            if position.cond.quantity < 0 and tick.close == position.contract.limit_up:
                 with position.lock:
                     position.status.cancel_preorder = True
                 for trade in self.positions[tick.code].entry_trades:
