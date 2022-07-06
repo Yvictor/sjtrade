@@ -73,3 +73,8 @@ def api(mocker: MockFixture, stock_contracts_raw: list) -> sj.Shioaji:
 @pytest.fixture
 def logger(mocker: MockFixture) -> loguru._logger.Logger:
     return mocker.patch("sjtrade.trader.logger")
+
+
+@pytest.fixture
+def logger_stratage(mocker: MockFixture) -> loguru._logger.Logger:
+    return mocker.patch("sjtrade.stratage.logger")

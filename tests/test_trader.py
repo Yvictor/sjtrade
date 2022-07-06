@@ -2,12 +2,18 @@ import pytest
 import time
 import datetime
 import loguru
-from pytest_mock import MockerFixture
+from pytest_mock import MockFixture, MockerFixture
 import shioaji as sj
 
 from decimal import Decimal
 from dataclasses import dataclass
-from sjtrade.trader import Position, PositionCond, SJTrader, SimulationShioaji
+from sjtrade.trader import (
+    Position,
+    PositionCond,
+    SJTrader,
+    SimulationShioaji,
+    StratageBasic,
+)
 from shioaji.constant import (
     Action,
     TFTStockPriceType,
@@ -30,58 +36,69 @@ class TickSTKv1:
 
 
 @pytest.fixture
-def sjtrader(api: sj.Shioaji) -> SJTrader:
-    return SJTrader(api)
-
-
-@pytest.fixture
-def sjtrader_sim(api: sj.Shioaji) -> SJTrader:
-    return SJTrader(api, simulation=True)
-
-
-@pytest.fixture
 def positions():
     return {"1605": -1, "6290": -3, "0000": 3}
 
 
 @pytest.fixture
-def sjtrader_entryed(sjtrader: SJTrader, positions: dict):
-    sjtrader.api.place_order.side_effect = lambda contract, order: (
+def sjtrader(api: sj.Shioaji, mocker: MockFixture, positions: dict) -> SJTrader:
+    sjtrader = SJTrader(api)
+    sjtrader.stratage = StratageBasic(entry_pct=0.05, contracts=api.Contracts)
+    sjtrader.stratage.read_position_func = mocker.MagicMock()
+    sjtrader.stratage.read_position_func.return_value = positions
+    return sjtrader
+
+
+@pytest.fixture
+def sjtrader_sim(api: sj.Shioaji, mocker: MockFixture, positions: dict) -> SJTrader:
+    sjtrader = SJTrader(api, simulation=True)
+    sjtrader.stratage = StratageBasic(entry_pct=0.05, contracts=api.Contracts)
+    sjtrader.stratage.read_position_func = mocker.MagicMock()
+    sjtrader.stratage.read_position_func.return_value = positions
+    return sjtrader
+
+
+@pytest.fixture
+def sjtrader_entryed(sjtrader: SJTrader):
+    sjtrader.api.place_order.side_effect = lambda contract, order, timeout: (
         sj.order.Trade(
             contract,
             order,
             sj.order.OrderStatus(status=sj.order.Status.PreSubmitted),
         )
     )
-    res = sjtrader.place_entry_positions(positions, 0.05)
+    res = sjtrader.place_entry_positions()
     return sjtrader
 
 
 @pytest.fixture
 def sjtrader_entryed_sim(sjtrader_sim: SJTrader, positions: dict) -> SJTrader:
-    res = sjtrader_sim.place_entry_positions(positions, 0.05)
+    res = sjtrader_sim.place_entry_positions()
     return sjtrader_sim
 
 
 def test_sjtrader(api: sj.Shioaji):
     sjtrader = SJTrader(api)
+    sjtrader.stratage = StratageBasic()
     assert hasattr(sjtrader, "api")
     sjtrader.stop_profit_pct = 0.1
     assert sjtrader.stop_profit_pct == 0.1
+    assert sjtrader.stratage.stop_profit_pct == 0.1
     sjtrader.stop_loss_pct = 0.1
     assert sjtrader.stop_loss_pct == 0.1
+    assert sjtrader.stratage.stop_loss_pct == 0.1
     sjtrader.position_filepath = "pos.txt"
     assert sjtrader.position_filepath == "pos.txt"
+    assert sjtrader.stratage.position_filepath == "pos.txt"
     sjtrader.entry_pct = 0.07
     assert sjtrader.entry_pct == 0.07
+    assert sjtrader.stratage.entry_pct == 0.07
 
 
-def test_sjtrader_start(sjtrader: SJTrader, mocker: MockerFixture, positions: dict):
-    sjtrader.read_position_func = mocker.MagicMock()
-    sjtrader.read_position_func.return_value = positions
+def test_sjtrader_start(sjtrader: SJTrader, mocker: MockerFixture):
     sleep_until_mock = mocker.patch("sjtrade.trader.sleep_until")
     sjtrader.start()
-    sjtrader.read_position_func.assert_called_once()
+    sjtrader.stratage.read_position_func.assert_called_once()
     sjtrader.api.set_order_callback.assert_called_once_with(sjtrader.order_deal_handler)
     sjtrader.api.quote.set_on_tick_stk_v1_callback.assert_has_calls(
         [((sjtrader.cancel_preorder_handler,),), ((sjtrader.intraday_handler,),)]
@@ -102,15 +119,19 @@ def test_sjtrader_sj_event_handler(sjtrader: SJTrader, logger: loguru._logger.Lo
 
 
 def test_sjtrader_place_entry_order(
-    sjtrader: SJTrader, logger: loguru._logger.Logger, positions: dict
+    sjtrader: SJTrader,
+    logger: loguru._logger.Logger,
+    logger_stratage: loguru._logger.Logger,
 ):
-    sjtrader.api.place_order.side_effect = lambda contract, order: sj.order.Trade(
-        contract, order, sj.order.OrderStatus(status=sj.order.Status.PreSubmitted)
+    sjtrader.api.place_order.side_effect = (
+        lambda contract, order, timeout: sj.order.Trade(
+            contract, order, sj.order.OrderStatus(status=sj.order.Status.PreSubmitted)
+        )
     )
     sjtrader.stop_loss_pct = 0.085
     sjtrader.stop_profit_pct = 0.09
-    res = sjtrader.place_entry_positions(positions, 0.05)
-    logger.warning.assert_called_once()
+    res = sjtrader.place_entry_positions()
+    logger_stratage.warning.assert_called_once()
     sjtrader.api.quote.subscribe.assert_has_calls(
         [
             ((sjtrader.api.Contracts.Stocks["1605"],), dict(version=QuoteVersion.v1)),
@@ -196,7 +217,7 @@ def test_sjtrader_cancel_preorder_handler(
 
     sjtrader_entryed.cancel_preorder_handler(Exchange.TSE, tick)
     sjtrader_entryed.api.cancel_order.assert_called_once_with(
-        sjtrader_entryed.positions["1605"].entry_trades[0]
+        sjtrader_entryed.positions["1605"].entry_trades[0], timeout=0
     )
     assert logger.info.called
     # TODO need single trade update status interface
@@ -212,7 +233,7 @@ def test_sjtrader_re_entry_order(
 ):
     tick = TickSTKv1("1605", "2022-05-25 08:45:01", 43.3, True)
 
-    def make_cancel_order_status(trade):
+    def make_cancel_order_status(trade, timeout):
         trade.status.status = sj.order.Status.Cancelled
         trade.status.cancel_quantity = trade.order.quantity
 
@@ -235,6 +256,7 @@ def test_sjtrader_re_entry_order(
             first_sell=StockFirstSell.Yes,
             custom_field="dt1",
         ),
+        timeout=0,
     )
     assert logger.info.called
 
@@ -595,10 +617,12 @@ def test_sjtrader_sim(api: sj.Shioaji):
 
 
 def test_sjtrader_sim_place_entry_order(
-    sjtrader_sim: SJTrader, logger: loguru._logger.Logger, positions: dict
+    sjtrader_sim: SJTrader,
+    logger: loguru._logger.Logger,
+    logger_stratage: loguru._logger.Logger,
 ):
-    res = sjtrader_sim.place_entry_positions(positions, 0.05)
-    logger.warning.assert_called_once()
+    res = sjtrader_sim.place_entry_positions()
+    logger_stratage.warning.assert_called_once()
     sjtrader_sim.api.quote.subscribe.assert_has_calls(
         [
             (

@@ -17,3 +17,4 @@ def inject_env():
 
 inject_env()
 from .trader import SJTrader
+from .stratage import StratageBase

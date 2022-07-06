@@ -21,7 +21,11 @@ def read_csv_position(
     if p.exists() and p.is_file():
         content = p.read_text()
         return {
-            r[0]: int(float(r[1]))
+            r[0]: {
+                "pos": int(float(r[1])),
+                "stop_loss_tick": int(r[2]),
+                "cover_pct": float(r[3]),
+            }
             for r in [
                 l.split(",") for l in content.split("\n")[int(with_header) :] if l
             ]
