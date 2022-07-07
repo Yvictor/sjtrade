@@ -7,6 +7,7 @@ import shioaji as sj
 
 from decimal import Decimal
 from dataclasses import dataclass
+from sjtrade.position import PriceSet
 from sjtrade.trader import (
     Position,
     PositionCond,
@@ -168,15 +169,38 @@ def test_sjtrader_place_entry_order(
             status=sj.order.OrderStatus(status=sj.order.Status.PreSubmitted),
         ),
     ]
+    cond_1605 = PositionCond(
+        quantity=-1,
+        entry_price=[
+            PriceSet(price=41.35, quantity=-1, price_type=TFTStockPriceType.LMT)
+        ],
+        stop_loss_price=[
+            PriceSet(price=42.7, quantity=-1, price_type=TFTStockPriceType.MKT)
+        ],
+        stop_profit_price=[
+            PriceSet(price=35.9, quantity=-1, price_type=TFTStockPriceType.MKT)
+        ],
+        cover_price=[],
+    )
+    cond_6290 = PositionCond(
+        quantity=-3,
+        entry_price=[
+            PriceSet(price=60.1, quantity=-3, price_type=TFTStockPriceType.LMT)
+        ],
+        stop_loss_price=[
+            PriceSet(price=62.1, quantity=-3, price_type=TFTStockPriceType.MKT)
+        ],
+        stop_profit_price=[
+            PriceSet(price=52.2, quantity=-3, price_type=TFTStockPriceType.MKT)
+        ],
+        cover_price=[],
+    )
+    assert sjtrader.positions["1605"].cond == cond_1605
+    assert sjtrader.positions["6290"].cond == cond_6290
     assert sjtrader.positions == {
         "1605": Position(
             contract=sjtrader.api.Contracts.Stocks["1605"],
-            cond=PositionCond(
-                quantity=-1,
-                entry_price={41.35: -1},
-                stop_loss_price={42.7: -1},
-                stop_profit_price={35.9: -1},
-            ),
+            cond=cond_1605,
             entry_trades=[
                 expected[0],
             ],
@@ -185,12 +209,7 @@ def test_sjtrader_place_entry_order(
         ),
         "6290": Position(
             contract=sjtrader.api.Contracts.Stocks["6290"],
-            cond=PositionCond(
-                quantity=-3,
-                entry_price={60.1: -3},
-                stop_loss_price={62.1: -3},
-                stop_profit_price={52.2: -3},
-            ),
+            cond=cond_6290,
             entry_trades=[
                 expected[1],
             ],

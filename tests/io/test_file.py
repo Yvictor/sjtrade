@@ -42,3 +42,8 @@ def test_read_csv_position(mocker: MockFixture):
         "1760": {"pos": -9, "stop_loss_tick": 4, "cover_pct": 2},
         "1795": {"pos": -9, "stop_loss_tick": 2, "cover_pct": 1},
     }
+
+
+def test_read_position_notfile():
+    with pytest.raises(FileNotFoundError):
+        read_csv_position("")

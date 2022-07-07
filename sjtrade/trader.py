@@ -1,13 +1,13 @@
 import datetime
-from dataclasses import dataclass, field
-from typing import Callable, Dict, List, Union
-from threading import Lock
+import operator
+from typing import Callable, Dict, List, Optional, Union
 from concurrent.futures import Future, ThreadPoolExecutor
 import shioaji as sj
 
 from .utils import quantity_split, sleep_until
 from .simulation_shioaji import SimulationShioaji
 from .stratage import StratageBasic
+from .position import Position, PositionCond, PriceSet
 from loguru import logger
 from shioaji.constant import (
     Action,
@@ -18,35 +18,6 @@ from shioaji.constant import (
     OrderState,
     StockFirstSell,
 )
-
-
-@dataclass
-class PositionCond:
-    quantity: int
-    entry_price: Dict[float, int]
-    stop_loss_price: Dict[float, int]
-    stop_profit_price: Dict[float, int]
-
-
-@dataclass
-class PositionStatus:
-    cancel_preorder: bool = False
-    cancel_quantity: int = 0
-    entry_order_quantity: int = 0
-    entry_quantity: int = 0
-    open_quantity: int = 0
-    cover_order_quantity: int = 0
-    cover_quantity: int = 0
-
-
-@dataclass
-class Position:
-    contract: sj.contracts.Contract
-    cond: PositionCond
-    status: PositionStatus = field(default_factory=PositionStatus)
-    entry_trades: List[sj.order.Trade] = field(default_factory=list)
-    cover_trades: List[sj.order.Trade] = field(default_factory=list)
-    lock: Lock = field(default_factory=Lock)
 
 
 class SJTrader:
@@ -147,9 +118,9 @@ class SJTrader:
         self,
         code: str,
         pos: int,
-        entry_price: Dict[float, int],
-        stop_profit_price: Dict[float, int],
-        stop_loss_price: Dict[float, int],
+        entry_price: List[PriceSet],
+        stop_profit_price: List[PriceSet],
+        stop_loss_price: List[PriceSet],
     ):
         api = self.simulation_api if self.simulation else self.api
         contract = self.api.Contracts.Stocks[code]
@@ -163,10 +134,12 @@ class SJTrader:
                     entry_price=entry_price,
                     stop_loss_price=stop_loss_price,
                     stop_profit_price=stop_profit_price,
+                    cover_price=[],
                 ),
             )
             self.api.quote.subscribe(contract, version=QuoteVersion.v1)
-            for price, price_quantity in self.positions[code].cond.entry_price.items():
+            for price_set in self.positions[code].cond.entry_price:
+                price, price_quantity = price_set.price, price_set.quantity
                 quantity_s = quantity_split(price_quantity, threshold=499)
                 with self.positions[code].lock:
                     for q in quantity_s:
@@ -176,7 +149,7 @@ class SJTrader:
                                 price=price,
                                 quantity=abs(q),
                                 action=Action.Buy if pos > 0 else Action.Sell,
-                                price_type=TFTStockPriceType.LMT,
+                                price_type=price_set.price_type,
                                 order_type=TFTOrderType.ROD,
                                 first_sell=StockFirstSell.No
                                 if pos > 0
@@ -227,8 +200,9 @@ class SJTrader:
         if not tick.simtrade:
             if tick.code not in self.open_price:
                 self.open_price[tick.code] = tick.close
-                if position.status.cancel_preorder and tick.close < min(
-                    position.cond.stop_loss_price.keys()
+                if (
+                    position.status.cancel_preorder
+                    and tick.close < position.cond.stop_loss_price[0].price
                 ):  # TODO check min or max
                     trade = api.place_order(
                         contract=position.contract,
@@ -261,42 +235,38 @@ class SJTrader:
 
     def stop_profit(self, position: Position, tick: sj.TickSTKv1):
         if not tick.simtrade:
-            if position.status.open_quantity > 0 and tick.close >= min(
-                position.cond.stop_profit_price.keys()
-            ):
-                self.place_cover_order(position)
-                logger.info(
-                    f"{position.contract.code} | price: {tick.close} cross over {position.cond.stop_profit_price}"
-                )
-
-            if position.status.open_quantity < 0 and tick.close <= max(
-                position.cond.stop_profit_price.keys()
-            ):
-                self.place_cover_order(position)
-                logger.info(
-                    f"{position.contract.code} | price: {tick.close} cross under {position.cond.stop_profit_price}"
-                )
+            if position.status.open_quantity > 0:
+                op = operator.ge
+                cross = "over"
+            else:
+                op = operator.le
+                cross = "under"
+            for price_set in position.cond.stop_profit_price:
+                if op(tick.close, price_set.price):
+                    self.place_cover_order(position, price_set)
+                    logger.info(
+                        f"{position.contract.code} | price: {tick.close} cross {cross} {price_set.price} "
+                        f"cover quantity: {price_set.quantity}"
+                    )
 
     def stop_loss(self, position: Position, tick: sj.TickSTKv1):
         if not tick.simtrade:
-            if position.status.open_quantity > 0 and tick.close <= max(
-                position.cond.stop_loss_price.keys()
-            ):
-                self.place_cover_order(position)
-                logger.info(
-                    f"{position.contract.code} | price: {tick.close} cross under {position.cond.stop_loss_price}"
-                )
-
-            if position.status.open_quantity < 0 and tick.close >= min(
-                position.cond.stop_loss_price.keys()
-            ):
-                self.place_cover_order(position)
-                logger.info(
-                    f"{position.contract.code} | price: {tick.close} cross over {position.cond.stop_loss_price}"
-                )
+            if position.status.open_quantity > 0:
+                op = operator.le
+                cross = "under"
+            else:
+                op = operator.ge
+                cross = "over"
+            for price_set in position.cond.stop_profit_price:
+                if op(tick.close, price_set.price):
+                    self.place_cover_order(position, price_set)
+                    logger.info(
+                        f"{position.contract.code} | price: {tick.close} cross {cross} {price_set.price} "
+                        f"cover quantity: {price_set.quantity}"
+                    )
 
     def place_cover_order(
-        self, position: Position, with_price: bool = False
+        self, position: Position, price_set: Optional[PriceSet] = None
     ):  # TODO with price quantity
         if self.simulation:
             api = self.simulation_api
@@ -305,34 +275,35 @@ class SJTrader:
         cover_quantity = (
             position.status.open_quantity + position.status.cover_order_quantity
         )
-        if cover_quantity:
-            action = Action.Buy if cover_quantity < 0 else Action.Sell
-            # TODO support price with quantity for price, price_quantity in position.cond
-            quantity_s = quantity_split(cover_quantity, threshold=499)
-            for q in quantity_s:
-                trade = api.place_order(
-                    contract=position.contract,
-                    order=sj.order.TFTStockOrder(
-                        price=(
-                            position.contract.limit_up
-                            if action == Action.Buy
-                            else position.contract.limit_down
-                        )
-                        if with_price
-                        else 0,
-                        quantity=abs(q),
-                        action=action,
-                        price_type=TFTStockPriceType.LMT
-                        if with_price
-                        else TFTStockPriceType.MKT,
-                        order_type=TFTOrderType.ROD,
-                        custom_field=self.name,
-                    ),
-                    timeout=0,
-                )
-                logger.info(f"{trade.contract.code} | {trade.order}")
-                position.cover_trades.append(trade)
-                api.update_status(trade=trade)
+        if price_set is None:
+            price_set = self.stratage.cover_price_set(position)[0]
+        skip = (cover_quantity == 0)
+        if cover_quantity < 0:
+            action = Action.Buy
+            op = max
+        elif cover_quantity > 0:
+            action = Action.Sell
+            op = min
+        if not skip:
+            cover_quantity_set = op(cover_quantity, price_set.quantity)
+            if cover_quantity_set:
+                quantity_s = quantity_split(cover_quantity_set, threshold=499)
+                for q in quantity_s:
+                    trade = api.place_order(
+                        contract=position.contract,
+                        order=sj.order.TFTStockOrder(
+                            price=price_set.price,
+                            quantity=abs(q),
+                            action=action,
+                            price_type=price_set.price_type,
+                            order_type=TFTOrderType.ROD,
+                            custom_field=self.name,
+                        ),
+                        timeout=0,
+                    )
+                    logger.info(f"{trade.contract.code} | {trade.order}")
+                    position.cover_trades.append(trade)
+                    api.update_status(trade=trade)
 
     def open_position_cover(self):
         if self.simulation:
@@ -363,9 +334,10 @@ class SJTrader:
                     ]:
                         api.cancel_order(trade, timeout=0)
             # event wait cancel
+        self.positions = self.stratage.cover_positions(self.positions)
         for code, position in self.positions.items():
             if position.status.open_quantity:
-                self.place_cover_order(position, with_price=True)
+                self.place_cover_order(position, position.cond.cover_price)
 
     def order_deal_handler(self, order_stats: OrderState, msg: Dict):
         if (
