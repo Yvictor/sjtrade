@@ -7,7 +7,7 @@ import shioaji as sj
 from .utils import quantity_split, sleep_until
 from .data import Snapshot
 from .simulation_shioaji import SimulationShioaji
-from .stratage import StratageBasic
+from .strategy import StrategyBasic
 from .position import Position, PositionCond, PriceSet
 from loguru import logger
 from shioaji.constant import (
@@ -38,7 +38,7 @@ class SJTrader:
             self.simulation_api = SimulationShioaji(self.order_deal_handler)
         self.api.set_order_callback(self.order_deal_handler)
         self.api.quote.set_event_callback(self.sj_event_handel)
-        self.stratage = StratageBasic(contracts=self.api.Contracts)
+        self.stratage = StrategyBasic(contracts=self.api.Contracts)
         # self.account = api.stock_account
         # self.entry_trades: Dict[str, sj.order.Trade] = {}
 

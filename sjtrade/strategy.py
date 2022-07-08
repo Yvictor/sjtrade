@@ -9,7 +9,7 @@ from .position import Position, PriceSet
 from .data import Snapshot
 
 
-class StratageBase:
+class StrategyBase:
     name: str
 
     def entry_positions(self):
@@ -42,7 +42,7 @@ class StratageBase:
         return positions
 
 
-class StratageBasic(StratageBase):
+class StrategyBasic(StrategyBase):
     def __init__(
         self,
         entry_pct: float = 0.05,

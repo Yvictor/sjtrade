@@ -2,7 +2,7 @@
 trading with shioaji
 """
 
-__version__ = "0.4.0"
+__version__ = "0.4.1"
 
 def inject_env():
     import os
@@ -17,4 +17,4 @@ def inject_env():
 
 inject_env()
 from .trader import SJTrader
-from .stratage import StratageBase
+from .strategy import StrategyBase

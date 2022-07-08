@@ -13,7 +13,7 @@ from sjtrade.trader import (
     PositionCond,
     SJTrader,
     SimulationShioaji,
-    StratageBasic,
+    StrategyBasic,
 )
 from shioaji.constant import (
     Action,
@@ -44,7 +44,7 @@ def positions():
 @pytest.fixture
 def sjtrader(api: sj.Shioaji, mocker: MockFixture, positions: dict) -> SJTrader:
     sjtrader = SJTrader(api)
-    sjtrader.stratage = StratageBasic(entry_pct=0.05, contracts=api.Contracts)
+    sjtrader.stratage = StrategyBasic(entry_pct=0.05, contracts=api.Contracts)
     sjtrader.stratage.read_position_func = mocker.MagicMock()
     sjtrader.stratage.read_position_func.return_value = positions
     return sjtrader
@@ -53,7 +53,7 @@ def sjtrader(api: sj.Shioaji, mocker: MockFixture, positions: dict) -> SJTrader:
 @pytest.fixture
 def sjtrader_sim(api: sj.Shioaji, mocker: MockFixture, positions: dict) -> SJTrader:
     sjtrader = SJTrader(api, simulation=True)
-    sjtrader.stratage = StratageBasic(entry_pct=0.05, contracts=api.Contracts)
+    sjtrader.stratage = StrategyBasic(entry_pct=0.05, contracts=api.Contracts)
     sjtrader.stratage.read_position_func = mocker.MagicMock()
     sjtrader.stratage.read_position_func.return_value = positions
     return sjtrader
@@ -80,7 +80,7 @@ def sjtrader_entryed_sim(sjtrader_sim: SJTrader, positions: dict) -> SJTrader:
 
 def test_sjtrader(api: sj.Shioaji):
     sjtrader = SJTrader(api)
-    sjtrader.stratage = StratageBasic()
+    sjtrader.stratage = StrategyBasic()
     assert hasattr(sjtrader, "api")
     sjtrader.stop_profit_pct = 0.1
     assert sjtrader.stop_profit_pct == 0.1

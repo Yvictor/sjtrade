@@ -1,10 +1,10 @@
 import pytest
 
-from sjtrade.stratage import StratageBase
+from sjtrade.strategy import StrategyBase
 
 
 def test_stratage_base():
-    stratage = StratageBase()
+    stratage = StrategyBase()
     with pytest.raises(NotImplementedError):
         stratage.entry_positions()
 
