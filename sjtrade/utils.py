@@ -34,6 +34,10 @@ def price_move(price: float, tick: int) -> float:
     return rs2py.get_price_tick_move(price, tick)
 
 
+def price_between_tick(p0: float, p1: float) -> int:
+    return rs2py.get_price_between_tick(p0, p1)
+
+
 def quantity_num_split(quantity: int, num: int) -> List[int]:
     neg = 1 if quantity > 0 else -1
     quantity_remain = abs(quantity)

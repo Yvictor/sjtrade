@@ -3,6 +3,7 @@ from typing import List
 import pytest
 from pytest_mock import MockerFixture
 from sjtrade.utils import (
+    price_between_tick,
     price_ceil,
     price_floor,
     price_move,
@@ -83,6 +84,17 @@ def test_price_round(price: float, up: bool, expected: float):
 )
 def test_price_move(price: float, up: bool, expected: float):
     assert price_move(price, up) == expected
+
+
+@pytest.mark.parametrize(
+    ("price0", "price1", "expected"),
+    [
+        (100, 102, 4),
+        (102, 101, -2),
+    ],
+)
+def test_price_between_tick(price0: float, price1: bool, expected: float):
+    assert price_between_tick(price0, price1) == expected
 
 
 @pytest.mark.parametrize(
