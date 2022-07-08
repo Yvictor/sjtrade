@@ -5,6 +5,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 import shioaji as sj
 
 from .utils import quantity_split, sleep_until
+from .data import Snapshot
 from .simulation_shioaji import SimulationShioaji
 from .stratage import StratageBasic
 from .position import Position, PositionCond, PriceSet
@@ -24,6 +25,7 @@ class SJTrader:
     def __init__(self, api: sj.Shioaji, simulation: bool = False):
         self.api = api
         self.positions: Dict[str, Position] = {}
+        self.snapshots: Dict[str, Snapshot] = {}
         self._stop_loss_pct = 0.09
         self._stop_profit_pct = 0.09
         self._entry_pct = 0.05
@@ -47,6 +49,7 @@ class SJTrader:
         intraday_handler_time: datetime.time = datetime.time(8, 59, 55),
         cover_time: datetime.time = datetime.time(13, 25, 59),
     ):
+        self.set_on_tick_handler(self.update_snapshot)
         entry_future = self.executor_on_time(entry_time, self.place_entry_positions)
         self.executor_on_time(
             cancel_preorder_time,
@@ -137,6 +140,7 @@ class SJTrader:
                     cover_price=[],
                 ),
             )
+            self.snapshots[code] = Snapshot(price=0.0)
             self.api.quote.subscribe(contract, version=QuoteVersion.v1)
             for price_set in self.positions[code].cond.entry_price:
                 price, price_quantity = price_set.price, price_set.quantity
@@ -167,6 +171,9 @@ class SJTrader:
             self.place_entry_order(**entry_kwarg)
         api.update_status()
         return self.positions
+
+    def update_snapshot(self, exchange: Exchange, tick: sj.TickSTKv1):
+        self.snapshots[tick.code].price = tick.close
 
     def cancel_preorder_handler(self, exchange: Exchange, tick: sj.TickSTKv1):
         position = self.positions[tick.code]
@@ -229,6 +236,7 @@ class SJTrader:
             self.simulation_api.quote_callback(exchange, tick)
         position = self.positions[tick.code]
         self.re_entry_order(position, tick)
+        self.update_snapshot(exchange, tick)
         # 9:00 -> 13:24:49 stop loss stop profit
         self.stop_loss(position, tick)
         self.stop_profit(position, tick)
@@ -243,7 +251,7 @@ class SJTrader:
                 cross = "under"
             for price_set in position.cond.stop_profit_price:
                 if op(tick.close, price_set.price):
-                    self.place_cover_order(position, price_set)
+                    self.place_cover_order(position, [price_set])
                     logger.info(
                         f"{position.contract.code} | price: {tick.close} cross {cross} {price_set.price} "
                         f"cover quantity: {price_set.quantity}"
@@ -259,14 +267,14 @@ class SJTrader:
                 cross = "over"
             for price_set in position.cond.stop_profit_price:
                 if op(tick.close, price_set.price):
-                    self.place_cover_order(position, price_set)
+                    self.place_cover_order(position, [price_set])
                     logger.info(
                         f"{position.contract.code} | price: {tick.close} cross {cross} {price_set.price} "
                         f"cover quantity: {price_set.quantity}"
                     )
 
     def place_cover_order(
-        self, position: Position, price_set: Optional[PriceSet] = None
+        self, position: Position, price_sets: List[PriceSet] = []
     ):  # TODO with price quantity
         if self.simulation:
             api = self.simulation_api
@@ -275,16 +283,19 @@ class SJTrader:
         cover_quantity = (
             position.status.open_quantity + position.status.cover_order_quantity
         )
-        if price_set is None:
-            price_set = self.stratage.cover_price_set(position)[0]
-        skip = (cover_quantity == 0)
-        if cover_quantity < 0:
+        if not price_sets:
+            price_sets = self.stratage.cover_price_set(
+                position, self.snapshots[position.contract.code]
+            )
+        if cover_quantity == 0:
+            return
+        elif cover_quantity < 0:
             action = Action.Buy
             op = max
-        elif cover_quantity > 0:
+        else:
             action = Action.Sell
             op = min
-        if not skip:
+        for price_set in price_sets:
             cover_quantity_set = op(cover_quantity, price_set.quantity)
             if cover_quantity_set:
                 quantity_s = quantity_split(cover_quantity_set, threshold=499)
@@ -305,7 +316,7 @@ class SJTrader:
                     position.cover_trades.append(trade)
                     api.update_status(trade=trade)
 
-    def open_position_cover(self):
+    def open_position_cover(self, onclose: bool = True):
         if self.simulation:
             api = self.simulation_api
         else:
@@ -334,7 +345,12 @@ class SJTrader:
                     ]:
                         api.cancel_order(trade, timeout=0)
             # event wait cancel
-        self.positions = self.stratage.cover_positions(self.positions)
+        if onclose:
+            self.positions = self.stratage.cover_positions_onclose(self.positions)
+        else:
+            self.positions = self.stratage.cover_positions(
+                self.positions, self.snapshots
+            )
         for code, position in self.positions.items():
             if position.status.open_quantity:
                 self.place_cover_order(position, position.cond.cover_price)

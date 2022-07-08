@@ -133,3 +133,6 @@ dmypy.json
 # misc
 login.json
 position.txt
+
+# sjtrade stratages
+sjtrade/stratages

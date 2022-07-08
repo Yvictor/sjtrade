@@ -1,6 +1,5 @@
 import shioaji as sj
-
-from typing import Callable, Dict, List, Optional, Union
+from typing import List
 from threading import Lock
 from dataclasses import dataclass, field
 from shioaji.constant import (
@@ -23,7 +22,7 @@ class PositionCond:
     entry_price: List[PriceSet]
     stop_loss_price: List[PriceSet]
     stop_profit_price: List[PriceSet]
-    cover_price: List[PriceSet]
+    cover_price: List[PriceSet] = field(default_factory=list)
 
 
 @dataclass

@@ -5,7 +5,9 @@ from pytest_mock import MockerFixture
 from sjtrade.utils import (
     price_ceil,
     price_floor,
+    price_move,
     price_round,
+    quantity_num_split,
     quantity_split,
     sleep_until,
 )
@@ -63,10 +65,39 @@ def test_price_floor(input: float, expected: float):
         (50.01, True, 50.1),
         (100.01, True, 100.5),
         (500.01, True, 501),
+        # TODO case 10% over limit up
     ],
 )
 def test_price_round(price: float, up: bool, expected: float):
     assert price_round(price, up) == expected
+
+@pytest.mark.parametrize(
+    ("price", "up", "expected"),
+    [
+        (9.9, 0, 9.9),
+        (10.05, 1, 10.1),
+        (10.05, 5, 10.3),
+        (50, 1, 50.1),
+        (49.9, 4, 50.2),
+    ],
+)
+def test_price_move(price: float, up: bool, expected: float):
+    assert price_move(price, up) == expected
+
+
+@pytest.mark.parametrize(
+    ("quantity", "num", "expected"),
+    [
+        (10 , 1, [10,]),
+        (10 , 3, [4, 3, 3]),
+        (8 , 3, [3, 3, 2]),
+        (15 , 4, [4, 4, 4, 3]),
+        (7 , 3, [3, 2, 2]),
+        (-7 , 3, [-3, -2, -2]),
+    ],
+)
+def test_quantity_num_split(quantity: int, num: int, expected: int):
+    assert quantity_num_split(quantity, num) == expected
 
 
 @pytest.mark.freeze_time("2022-06-06 00:30:00 UTC")

@@ -9,12 +9,7 @@ import xxhash
 import shioaji as sj
 from shioaji.constant import OrderState, Exchange, Action, TFTStockPriceType
 
-
-@dataclass
-class Snapshot:
-    price: float
-    bid: float = 0
-    ask: float = 0
+from .data import Snapshot
 
 
 class SimulationShioaji:

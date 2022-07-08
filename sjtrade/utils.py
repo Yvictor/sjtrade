@@ -1,6 +1,8 @@
 import math
 import time
+import rs2py
 import datetime
+from decimal import Decimal
 from typing import List, Union
 
 
@@ -26,6 +28,24 @@ def price_round(price: float, up: bool = False):
     return round(
         roudnf(price * n + ((5 * int(up) - (price * n % 5)) * (1 - quinary))) / n, 2
     )
+
+
+def price_move(price: float, tick: int) -> float:
+    return rs2py.get_price_tick_move(price, tick)
+
+
+def quantity_num_split(quantity: int, num: int) -> List[int]:
+    neg = 1 if quantity > 0 else -1
+    quantity_remain = abs(quantity)
+    quantity_split_res = [(quantity_remain // num) * neg] * num
+    quantity_remain -= abs(sum(quantity_split_res))
+    for idx, _ in enumerate(quantity_split_res):
+        qadd = math.ceil(quantity_remain / (num - idx))
+        quantity_remain -= qadd
+        quantity_split_res[idx] += qadd * neg
+        if not quantity_remain:
+            break
+    return quantity_split_res
 
 
 def quantity_split(quantity: float, threshold: int) -> List[int]:
