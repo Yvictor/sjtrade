@@ -28,10 +28,10 @@ class StrategyBase:
             return []
         return [
             PriceSet(
-                price=position.contract.limit_up
+                price=position.contract.limit_down
                 if position.status.open_quantity > 0
-                else position.contract.limit_down,
-                quantity=position.cond.quantity * -1,
+                else position.contract.limit_up,
+                quantity=position.status.open_quantity*-1,
                 price_type=TFTStockPriceType.LMT,
             )
         ]
