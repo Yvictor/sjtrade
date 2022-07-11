@@ -76,5 +76,5 @@ def logger(mocker: MockFixture) -> loguru._logger.Logger:
 
 
 @pytest.fixture
-def logger_stratage(mocker: MockFixture) -> loguru._logger.Logger:
+def logger_stratagy(mocker: MockFixture) -> loguru._logger.Logger:
     return mocker.patch("sjtrade.strategy.logger")

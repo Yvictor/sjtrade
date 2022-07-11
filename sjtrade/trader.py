@@ -38,7 +38,7 @@ class SJTrader:
             self.simulation_api = SimulationShioaji(self.order_deal_handler)
         self.api.set_order_callback(self.order_deal_handler)
         self.api.quote.set_event_callback(self.sj_event_handel)
-        self.stratage = StrategyBasic(contracts=self.api.Contracts)
+        self.stratagy = StrategyBasic(contracts=self.api.Contracts)
         # self.account = api.stock_account
         # self.entry_trades: Dict[str, sj.order.Trade] = {}
 
@@ -83,7 +83,7 @@ class SJTrader:
     @stop_loss_pct.setter
     def stop_loss_pct(self, v: float) -> float:
         self._stop_loss_pct = v
-        self.stratage.stop_loss_pct = self._stop_loss_pct
+        self.stratagy.stop_loss_pct = self._stop_loss_pct
 
     @property
     def stop_profit_pct(self) -> float:
@@ -92,7 +92,7 @@ class SJTrader:
     @stop_profit_pct.setter
     def stop_profit_pct(self, v: float) -> float:
         self._stop_profit_pct = v
-        self.stratage.stop_profit_pct = self._stop_profit_pct
+        self.stratagy.stop_profit_pct = self._stop_profit_pct
 
     @property
     def entry_pct(self) -> float:
@@ -101,7 +101,7 @@ class SJTrader:
     @entry_pct.setter
     def entry_pct(self, v: float) -> float:
         self._entry_pct = v
-        self.stratage.entry_pct = self._entry_pct
+        self.stratagy.entry_pct = self._entry_pct
 
     @property
     def position_filepath(self) -> float:
@@ -110,7 +110,7 @@ class SJTrader:
     @position_filepath.setter
     def position_filepath(self, v: str) -> float:
         self._position_filepath = v
-        self.stratage.position_filepath = self._position_filepath
+        self.stratagy.position_filepath = self._position_filepath
 
     def sj_event_handel(self, resp_code: int, event_code: int, info: str, event: str):
         logger.info(
@@ -167,7 +167,7 @@ class SJTrader:
 
     def place_entry_positions(self) -> Dict[str, Position]:
         api = self.simulation_api if self.simulation else self.api
-        for entry_kwarg in self.stratage.entry_positions():
+        for entry_kwarg in self.stratagy.entry_positions():
             self.place_entry_order(**entry_kwarg)
         api.update_status()
         return self.positions
@@ -243,6 +243,11 @@ class SJTrader:
 
     def stop_profit(self, position: Position, tick: sj.TickSTKv1):
         if not tick.simtrade:
+            cover_quantity = (
+                position.status.open_quantity + position.status.cover_order_quantity
+            )
+            if cover_quantity == 0:
+                return
             if position.status.open_quantity > 0:
                 op = operator.ge
                 cross = "over"
@@ -259,13 +264,18 @@ class SJTrader:
 
     def stop_loss(self, position: Position, tick: sj.TickSTKv1):
         if not tick.simtrade:
+            cover_quantity = (
+                position.status.open_quantity + position.status.cover_order_quantity
+            )
+            if cover_quantity == 0:
+                return
             if position.status.open_quantity > 0:
                 op = operator.le
                 cross = "under"
             else:
                 op = operator.ge
                 cross = "over"
-            for price_set in position.cond.stop_profit_price:
+            for price_set in position.cond.stop_loss_price:
                 if op(tick.close, price_set.price):
                     self.place_cover_order(position, [price_set])
                     logger.info(
@@ -284,7 +294,7 @@ class SJTrader:
             position.status.open_quantity + position.status.cover_order_quantity
         )
         if not price_sets:
-            price_sets = self.stratage.cover_price_set(
+            price_sets = self.stratagy.cover_price_set(
                 position, self.snapshots[position.contract.code]
             )
         if cover_quantity == 0:
@@ -346,9 +356,9 @@ class SJTrader:
                         api.cancel_order(trade, timeout=0)
             # event wait cancel
         if onclose:
-            self.positions = self.stratage.cover_positions_onclose(self.positions)
+            self.positions = self.stratagy.cover_positions_onclose(self.positions)
         else:
-            self.positions = self.stratage.cover_positions(
+            self.positions = self.stratagy.cover_positions(
                 self.positions, self.snapshots
             )
         for code, position in self.positions.items():

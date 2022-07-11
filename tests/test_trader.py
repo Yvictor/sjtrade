@@ -44,18 +44,18 @@ def positions():
 @pytest.fixture
 def sjtrader(api: sj.Shioaji, mocker: MockFixture, positions: dict) -> SJTrader:
     sjtrader = SJTrader(api)
-    sjtrader.stratage = StrategyBasic(entry_pct=0.05, contracts=api.Contracts)
-    sjtrader.stratage.read_position_func = mocker.MagicMock()
-    sjtrader.stratage.read_position_func.return_value = positions
+    sjtrader.stratagy = StrategyBasic(entry_pct=0.05, contracts=api.Contracts)
+    sjtrader.stratagy.read_position_func = mocker.MagicMock()
+    sjtrader.stratagy.read_position_func.return_value = positions
     return sjtrader
 
 
 @pytest.fixture
 def sjtrader_sim(api: sj.Shioaji, mocker: MockFixture, positions: dict) -> SJTrader:
     sjtrader = SJTrader(api, simulation=True)
-    sjtrader.stratage = StrategyBasic(entry_pct=0.05, contracts=api.Contracts)
-    sjtrader.stratage.read_position_func = mocker.MagicMock()
-    sjtrader.stratage.read_position_func.return_value = positions
+    sjtrader.stratagy = StrategyBasic(entry_pct=0.05, contracts=api.Contracts)
+    sjtrader.stratagy.read_position_func = mocker.MagicMock()
+    sjtrader.stratagy.read_position_func.return_value = positions
     return sjtrader
 
 
@@ -80,26 +80,26 @@ def sjtrader_entryed_sim(sjtrader_sim: SJTrader, positions: dict) -> SJTrader:
 
 def test_sjtrader(api: sj.Shioaji):
     sjtrader = SJTrader(api)
-    sjtrader.stratage = StrategyBasic()
+    sjtrader.stratagy = StrategyBasic()
     assert hasattr(sjtrader, "api")
     sjtrader.stop_profit_pct = 0.1
     assert sjtrader.stop_profit_pct == 0.1
-    assert sjtrader.stratage.stop_profit_pct == 0.1
+    assert sjtrader.stratagy.stop_profit_pct == 0.1
     sjtrader.stop_loss_pct = 0.1
     assert sjtrader.stop_loss_pct == 0.1
-    assert sjtrader.stratage.stop_loss_pct == 0.1
+    assert sjtrader.stratagy.stop_loss_pct == 0.1
     sjtrader.position_filepath = "pos.txt"
     assert sjtrader.position_filepath == "pos.txt"
-    assert sjtrader.stratage.position_filepath == "pos.txt"
+    assert sjtrader.stratagy.position_filepath == "pos.txt"
     sjtrader.entry_pct = 0.07
     assert sjtrader.entry_pct == 0.07
-    assert sjtrader.stratage.entry_pct == 0.07
+    assert sjtrader.stratagy.entry_pct == 0.07
 
 
 def test_sjtrader_start(sjtrader: SJTrader, mocker: MockerFixture):
     sleep_until_mock = mocker.patch("sjtrade.trader.sleep_until")
     sjtrader.start()
-    sjtrader.stratage.read_position_func.assert_called_once()
+    sjtrader.stratagy.read_position_func.assert_called_once()
     sjtrader.api.set_order_callback.assert_called_once_with(sjtrader.order_deal_handler)
     sjtrader.api.quote.set_on_tick_stk_v1_callback.assert_has_calls(
         [((sjtrader.cancel_preorder_handler,),), ((sjtrader.intraday_handler,),)]
@@ -122,7 +122,7 @@ def test_sjtrader_sj_event_handler(sjtrader: SJTrader, logger: loguru._logger.Lo
 def test_sjtrader_place_entry_order(
     sjtrader: SJTrader,
     logger: loguru._logger.Logger,
-    logger_stratage: loguru._logger.Logger,
+    logger_stratagy: loguru._logger.Logger,
 ):
     sjtrader.api.place_order.side_effect = (
         lambda contract, order, timeout: sj.order.Trade(
@@ -132,7 +132,7 @@ def test_sjtrader_place_entry_order(
     sjtrader.stop_loss_pct = 0.085
     sjtrader.stop_profit_pct = 0.09
     res = sjtrader.place_entry_positions()
-    logger_stratage.warning.assert_called_once()
+    logger_stratagy.warning.assert_called_once()
     sjtrader.api.quote.subscribe.assert_has_calls(
         [
             ((sjtrader.api.Contracts.Stocks["1605"],), dict(version=QuoteVersion.v1)),
@@ -638,10 +638,10 @@ def test_sjtrader_sim(api: sj.Shioaji):
 def test_sjtrader_sim_place_entry_order(
     sjtrader_sim: SJTrader,
     logger: loguru._logger.Logger,
-    logger_stratage: loguru._logger.Logger,
+    logger_stratagy: loguru._logger.Logger,
 ):
     res = sjtrader_sim.place_entry_positions()
-    logger_stratage.warning.assert_called_once()
+    logger_stratagy.warning.assert_called_once()
     sjtrader_sim.api.quote.subscribe.assert_has_calls(
         [
             (

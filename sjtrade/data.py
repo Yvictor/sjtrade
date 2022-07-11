@@ -1,8 +1,8 @@
 from dataclasses import dataclass
-
+from decimal import Decimal
 
 @dataclass
 class Snapshot:
-    price: float
-    bid: float = 0
-    ask: float = 0
+    price: Decimal
+    bid: Decimal = 0
+    ask: Decimal = 0
