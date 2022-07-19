@@ -22,6 +22,9 @@ from shioaji.constant import (
 )
 
 
+logger.add("sjtrader.log", rotation="1 days")
+
+
 class SJTrader:
     def __init__(self, api: sj.Shioaji, simulation: bool = False):
         self.api = api
@@ -131,7 +134,7 @@ class SJTrader:
         if not contract:
             logger.warning(f"Code: {code} not exist in TW Stock.")
         else:
-            self.positions[code] = Position(
+            position = self.positions[code] = Position(
                 contract=contract,
                 cond=PositionCond(
                     quantity=pos,
@@ -143,10 +146,12 @@ class SJTrader:
             )
             self.snapshots[code] = Snapshot(price=0.0)
             self.api.quote.subscribe(contract, version=QuoteVersion.v1)
-            for price_set in self.positions[code].cond.entry_price:
+            for price_set in position.cond.entry_price:
+                if abs(price_set.quantity) == abs(price_set.in_transit_quantity):
+                    continue
                 price, price_quantity = price_set.price, price_set.quantity
                 quantity_s = quantity_split(price_quantity, threshold=499)
-                with self.positions[code].lock:
+                with position.lock:
                     for q in quantity_s:
                         trade = api.place_order(
                             contract=contract,
@@ -163,7 +168,9 @@ class SJTrader:
                             ),
                             timeout=0,
                         )
-                        self.positions[code].entry_trades.append(trade)
+                        price_set.in_transit_quantity += q
+                        # position.status.entry_order_in_transit += q
+                        position.entry_trades.append(trade)
                         logger.info(f"{code} | {trade.order}")
 
     def place_entry_positions(self) -> Dict[str, Position]:
@@ -257,6 +264,8 @@ class SJTrader:
                 cross = "under"
             for price_set in position.cond.stop_profit_price:
                 if op(tick.close, price_set.price):
+                    if abs(price_set.quantity) == abs(price_set.in_transit_quantity):
+                        continue
                     self.place_cover_order(position, [price_set])
                     logger.info(
                         f"{position.contract.code} | price: {tick.close} cross {cross} {price_set.price} "
@@ -278,6 +287,8 @@ class SJTrader:
                 cross = "over"
             for price_set in position.cond.stop_loss_price:
                 if op(tick.close, price_set.price):
+                    if abs(price_set.quantity) == abs(price_set.in_transit_quantity):
+                        continue
                     self.place_cover_order(position, [price_set])
                     logger.info(
                         f"{position.contract.code} | price: {tick.close} cross {cross} {price_set.price} "
@@ -298,9 +309,12 @@ class SJTrader:
             price_sets = self.stratagy.cover_price_set(
                 position, self.snapshots[position.contract.code]
             )
+            position.cond.cover_price += price_sets
         if cover_quantity == 0:
             return
         for price_set in price_sets:
+            if abs(price_set.quantity) == abs(price_set.in_transit_quantity):
+                continue
             if price_set.quantity:
                 quantity_s = quantity_split(price_set.quantity, threshold=499)
                 for q in quantity_s:
@@ -319,8 +333,9 @@ class SJTrader:
                         timeout=0,
                     )
                     logger.info(f"{trade.contract.code} | {trade.order}")
+                    price_set.in_transit_quantity += q
                     position.cover_trades.append(trade)
-                    api.update_status(trade=trade)
+                    # api.update_status(trade=trade)
 
     def open_position_cover(self, onclose: bool = True):
         if self.simulation:

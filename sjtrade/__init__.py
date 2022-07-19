@@ -2,7 +2,7 @@
 trading with shioaji
 """
 
-__version__ = "0.4.3"
+__version__ = "0.4.4"
 
 def inject_env():
     import os

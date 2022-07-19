@@ -172,7 +172,7 @@ def test_sjtrader_place_entry_order(
     cond_1605 = PositionCond(
         quantity=-1,
         entry_price=[
-            PriceSet(price=41.35, quantity=-1, price_type=TFTStockPriceType.LMT)
+            PriceSet(price=41.35, quantity=-1, price_type=TFTStockPriceType.LMT, in_transit_quantity=-1)
         ],
         stop_loss_price=[
             PriceSet(price=42.7, quantity=-1, price_type=TFTStockPriceType.MKT)
@@ -185,7 +185,7 @@ def test_sjtrader_place_entry_order(
     cond_6290 = PositionCond(
         quantity=-3,
         entry_price=[
-            PriceSet(price=60.1, quantity=-3, price_type=TFTStockPriceType.LMT)
+            PriceSet(price=60.1, quantity=-3, price_type=TFTStockPriceType.LMT, in_transit_quantity=-3)
         ],
         stop_loss_price=[
             PriceSet(price=62.1, quantity=-3, price_type=TFTStockPriceType.MKT)

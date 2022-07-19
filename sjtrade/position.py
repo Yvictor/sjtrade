@@ -12,6 +12,7 @@ class PriceSet:
     price: float
     quantity: int
     price_type: TFTStockPriceType
+    in_transit_quantity: int = 0
     # time: datetime.time
     # time_cond: TimeCond
 
