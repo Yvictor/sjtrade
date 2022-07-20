@@ -3,8 +3,8 @@ from typing import Dict, Optional
 from loguru import logger
 from shioaji.constant import TFTStockPriceType
 
-from .io.file import read_csv_position, read_position
-from .utils import price_move, price_round, quantity_num_split
+from .io.file import read_position
+from .utils import price_round, price_limit
 from .position import Position, PriceSet
 from .data import Snapshot
 
@@ -31,7 +31,7 @@ class StrategyBase:
                 price=position.contract.limit_down
                 if position.status.open_quantity > 0
                 else position.contract.limit_up,
-                quantity=position.status.open_quantity*-1,
+                quantity=position.status.open_quantity * -1,
                 price_type=TFTStockPriceType.LMT,
             )
         ]
@@ -70,11 +70,23 @@ class StrategyBasic(StrategyBase):
             stop_loss_price = contract.reference * (
                 1 + (-1 if pos > 0 else 1) * (self.stop_loss_pct)
             )
+            stop_loss_price = price_round(stop_loss_price, pos > 0)
+            stop_loss_price = price_limit(
+                stop_loss_price, contract.limit_up, contract.limit_down
+            )
             stop_profit_price = contract.reference * (
                 1 + (1 if pos > 0 else -1) * (self.stop_profit_pct)
             )
+            stop_profit_price = price_round(stop_profit_price, pos < 0)
+            stop_profit_price = price_limit(
+                stop_profit_price, contract.limit_up, contract.limit_down
+            )
             entry_price = contract.reference * (
                 1 + (-1 if pos > 0 else 1) * self.entry_pct
+            )
+            entry_price = price_round(entry_price, pos > 0)
+            entry_price = price_limit(
+                entry_price, contract.limit_up, contract.limit_down
             )
             entry_args.append(
                 {
@@ -82,21 +94,21 @@ class StrategyBasic(StrategyBase):
                     "pos": pos,
                     "entry_price": [
                         PriceSet(
-                            price=price_round(entry_price, pos > 0),
+                            price=entry_price,
                             quantity=pos,
                             price_type=TFTStockPriceType.LMT,
                         )
                     ],
                     "stop_profit_price": [
                         PriceSet(
-                            price=price_round(stop_profit_price, pos < 0),
+                            price=stop_profit_price,
                             quantity=pos,
                             price_type=TFTStockPriceType.MKT,
                         )
                     ],
                     "stop_loss_price": [
                         PriceSet(
-                            price=price_round(stop_loss_price, pos > 0),
+                            price=stop_loss_price,
                             quantity=pos,
                             price_type=TFTStockPriceType.MKT,
                         )
@@ -112,4 +124,3 @@ class StrategyBasic(StrategyBase):
         self, positions: Dict[str, Position], snapshots: Dict[str, Snapshot] = dict()
     ):
         return self.cover_positions_onclose()
-

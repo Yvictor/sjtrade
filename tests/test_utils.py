@@ -66,6 +66,7 @@ def test_price_floor(input: float, expected: float):
         (50.01, True, 50.1),
         (100.01, True, 100.5),
         (500.01, True, 501),
+        (34.05, False, 34.05),
         # TODO case 10% over limit up
     ],
 )
