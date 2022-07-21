@@ -191,7 +191,7 @@ class SJTrader:
             api = self.api
         # 8:55 - 8:59:55
         if tick.simtrade:
-            if position.cond.quantity < 0 and tick.close == position.contract.limit_up:
+            if position.cond.quantity < 0 and float(tick.close) == position.contract.limit_up:
                 with position.lock:
                     position.status.cancel_preorder = True
                 for trade in self.positions[tick.code].entry_trades:
@@ -217,7 +217,7 @@ class SJTrader:
                 self.open_price[tick.code] = tick.close
                 if (
                     position.status.cancel_preorder
-                    and tick.close < position.cond.stop_loss_price[0].price
+                    and float(tick.close) < position.cond.stop_loss_price[0].price
                 ):  # TODO check min or max
                     trade = api.place_order(
                         contract=position.contract,
@@ -263,7 +263,7 @@ class SJTrader:
                 op = operator.le
                 cross = "under"
             for price_set in position.cond.stop_profit_price:
-                if op(tick.close, price_set.price):
+                if op(float(tick.close), price_set.price):
                     if abs(price_set.quantity) == abs(price_set.in_transit_quantity):
                         continue
                     self.place_cover_order(position, [price_set])
@@ -286,7 +286,7 @@ class SJTrader:
                 op = operator.ge
                 cross = "over"
             for price_set in position.cond.stop_loss_price:
-                if op(tick.close, price_set.price):
+                if op(float(tick.close), price_set.price):
                     if abs(price_set.quantity) == abs(price_set.in_transit_quantity):
                         continue
                     self.place_cover_order(position, [price_set])

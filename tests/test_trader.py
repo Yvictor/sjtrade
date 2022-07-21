@@ -224,7 +224,7 @@ def test_sjtrader_place_entry_order(
 def test_sjtrader_cancel_preorder_handler(
     sjtrader_entryed: SJTrader, mocker: MockerFixture, logger: loguru._logger.Logger
 ):
-    tick = TickSTKv1("1605", "2022-05-25 08:45:01", 43.3, True)
+    tick = TickSTKv1("1605", "2022-05-25 08:45:01", Decimal("43.3"), True)
 
     def make_cancel_order_status(trade):
         trade.status.status = sj.order.Status.Cancelled
@@ -250,7 +250,7 @@ def test_sjtrader_cancel_preorder_handler(
 def test_sjtrader_re_entry_order(
     sjtrader_entryed: SJTrader, mocker: MockerFixture, logger: loguru._logger.Logger
 ):
-    tick = TickSTKv1("1605", "2022-05-25 08:45:01", 43.3, True)
+    tick = TickSTKv1("1605", "2022-05-25 08:45:01", Decimal("43.3"), True)
 
     def make_cancel_order_status(trade, timeout):
         trade.status.status = sj.order.Status.Cancelled
@@ -262,7 +262,7 @@ def test_sjtrader_re_entry_order(
     position = sjtrader_entryed.positions["1605"]
     sjtrader_entryed.cancel_preorder_handler(position, tick)
 
-    tick = TickSTKv1("1605", "2022-05-25 09:00:01", 35, False)
+    tick = TickSTKv1("1605", "2022-05-25 09:00:01", Decimal("35"), False)
     sjtrader_entryed.re_entry_order(position, tick)
     sjtrader_entryed.api.place_order.assert_called_with(
         contract=position.contract,
@@ -283,7 +283,7 @@ def test_sjtrader_re_entry_order(
 def test_sjtrader_stop_profit(
     sjtrader_entryed: SJTrader, mocker: MockerFixture, logger: loguru._logger.Logger
 ):
-    tick = TickSTKv1("1605", "2022-05-25 08:45:01", 35.5, False)
+    tick = TickSTKv1("1605", "2022-05-25 08:45:01", Decimal("35.5"), False)
     position = sjtrader_entryed.positions["1605"]
     position.status.open_quantity = -1
     sjtrader_entryed.place_cover_order = mocker.MagicMock()
@@ -295,7 +295,7 @@ def test_sjtrader_stop_profit(
 def test_sjtrader_stop_loss(
     sjtrader_entryed: SJTrader, mocker: MockerFixture, logger: loguru._logger.Logger
 ):
-    tick = TickSTKv1("1605", "2022-05-25 08:45:01", 43.3, False)
+    tick = TickSTKv1("1605", "2022-05-25 08:45:01", Decimal("43.3"), False)
     position = sjtrader_entryed.positions["1605"]
     position.status.open_quantity = -1
     sjtrader_entryed.place_cover_order = mocker.MagicMock()
@@ -305,7 +305,7 @@ def test_sjtrader_stop_loss(
 
 
 def test_sjtrader_intraday_handler(sjtrader_entryed: SJTrader, mocker: MockerFixture):
-    tick = TickSTKv1("1605", "2022-05-25 08:45:01", 43.3, True)
+    tick = TickSTKv1("1605", "2022-05-25 08:45:01", Decimal("43.3"), True)
     sjtrader_entryed.re_entry_order = mocker.MagicMock()
     sjtrader_entryed.stop_profit = mocker.MagicMock()
     sjtrader_entryed.stop_loss = mocker.MagicMock()
