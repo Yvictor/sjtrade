@@ -236,7 +236,7 @@ def test_sjtrader_cancel_preorder_handler(
 
     sjtrader_entryed.cancel_preorder_handler(Exchange.TSE, tick)
     sjtrader_entryed.api.cancel_order.assert_called_once_with(
-        sjtrader_entryed.positions["1605"].entry_trades[0], timeout=0
+        sjtrader_entryed.positions["1605"].entry_trades[0]#, timeout=0
     )
     assert logger.info.called
     # TODO need single trade update status interface

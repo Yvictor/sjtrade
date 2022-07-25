@@ -196,8 +196,9 @@ class SJTrader:
                     position.status.cancel_preorder = True
                 for trade in self.positions[tick.code].entry_trades:
                     if trade.status.status != sj.order.Status.Cancelled:
-                        api.cancel_order(trade, timeout=0)
+                        api.cancel_order(trade)
                         logger.info(f"{trade.contract.code} | {trade.order}")
+                        api.update_status(trade=trade)
                         # check handle
                         # self.update_status(trade)
                         # if trade.status.status == sj.order.Status.Cancelled:
