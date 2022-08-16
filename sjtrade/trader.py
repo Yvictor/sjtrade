@@ -191,7 +191,10 @@ class SJTrader:
             api = self.api
         # 8:55 - 8:59:55
         if tick.simtrade:
-            if position.cond.quantity < 0 and float(tick.close) == position.contract.limit_up:
+            if (
+                position.cond.quantity < 0
+                and float(tick.close) == position.contract.limit_up
+            ):
                 with position.lock:
                     position.status.cancel_preorder = True
                 for trade in self.positions[tick.code].entry_trades:
@@ -252,8 +255,8 @@ class SJTrader:
 
     def stop_profit(self, position: Position, tick: sj.TickSTKv1):
         if not tick.simtrade:
-            cover_quantity = (
-                position.status.open_quantity + position.status.cover_order_quantity
+            cover_quantity = position.status.open_quantity + (
+                position.status.cover_order_quantity - position.status.cover_quantity
             )
             if cover_quantity == 0:
                 return
@@ -275,8 +278,8 @@ class SJTrader:
 
     def stop_loss(self, position: Position, tick: sj.TickSTKv1):
         if not tick.simtrade:
-            cover_quantity = (
-                position.status.open_quantity + position.status.cover_order_quantity
+            cover_quantity = position.status.open_quantity + (
+                position.status.cover_order_quantity - position.status.cover_quantity
             )
             if cover_quantity == 0:
                 return
@@ -303,8 +306,8 @@ class SJTrader:
             api = self.simulation_api
         else:
             api = self.api
-        cover_quantity = (
-            position.status.open_quantity + position.status.cover_order_quantity
+        cover_quantity = position.status.open_quantity + (
+            position.status.cover_order_quantity - position.status.cover_quantity
         )
         if not price_sets:
             price_sets = self.stratagy.cover_price_set(
