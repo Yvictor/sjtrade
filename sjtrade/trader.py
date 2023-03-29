@@ -13,12 +13,11 @@ from .position import Position, PositionCond, PriceSet
 from loguru import logger
 from shioaji.constant import (
     Action,
-    TFTStockPriceType,
-    TFTOrderType,
+    StockPriceType,
+    OrderType,
     QuoteVersion,
     Exchange,
     OrderState,
-    StockFirstSell,
 )
 
 
@@ -160,10 +159,8 @@ class SJTrader:
                                 quantity=abs(q),
                                 action=Action.Buy if pos > 0 else Action.Sell,
                                 price_type=price_set.price_type,
-                                order_type=TFTOrderType.ROD,
-                                first_sell=StockFirstSell.No
-                                if pos > 0
-                                else StockFirstSell.Yes,
+                                order_type=OrderType.ROD,
+                                daytrade_short= False if pos > 0 else True,
                                 custom_field=self.name,
                             ),
                             timeout=0,
@@ -225,17 +222,15 @@ class SJTrader:
                 ):  # TODO check min or max
                     trade = api.place_order(
                         contract=position.contract,
-                        order=sj.order.TFTStockOrder(
+                        order=sj.order.StockOrder(
                             price=0,
                             quantity=abs(position.cond.quantity),
                             action=Action.Buy
                             if position.cond.quantity > 0
                             else Action.Sell,
-                            price_type=TFTStockPriceType.MKT,
-                            order_type=TFTOrderType.ROD,
-                            first_sell=StockFirstSell.No
-                            if position.cond.quantity > 0
-                            else StockFirstSell.Yes,
+                            price_type=StockPriceType.MKT,
+                            order_type=OrderType.ROD,
+                            daytrade_short=False if position.cond.quantity > 0 else True,
                             custom_field=self.name,
                         ),
                         timeout=0,
@@ -324,14 +319,14 @@ class SJTrader:
                 for q in quantity_s:
                     trade = api.place_order(
                         contract=position.contract,
-                        order=sj.order.TFTStockOrder(
+                        order=sj.order.StockOrder(
                             price=price_set.price,
                             quantity=abs(q),
                             action=Action.Buy
                             if position.cond.quantity < 0
                             else Action.Sell,
                             price_type=price_set.price_type,
-                            order_type=TFTOrderType.ROD,
+                            order_type=OrderType.ROD,
                             custom_field=self.name,
                         ),
                         timeout=0,
@@ -394,11 +389,11 @@ class SJTrader:
 
     def order_deal_handler(self, order_stats: OrderState, msg: Dict):
         if (
-            order_stats == OrderState.TFTOrder
+            order_stats == OrderState.StockOrder
             and msg["order"]["custom_field"] == self.name
         ):
             self.order_handler(msg, self.positions[msg["contract"]["code"]])
-        elif order_stats == OrderState.TFTDeal and msg["custom_field"] == self.name:
+        elif order_stats == OrderState.StockDeal and msg["custom_field"] == self.name:
             self.deal_handler(msg, self.positions[msg["code"]])
 
     def order_handler(self, msg: Dict, position: Position):

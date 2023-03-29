@@ -3,7 +3,7 @@ from typing import List
 from threading import Lock
 from dataclasses import dataclass, field
 from shioaji.constant import (
-    TFTStockPriceType,
+    StockPriceType,
 )
 
 
@@ -11,7 +11,7 @@ from shioaji.constant import (
 class PriceSet:
     price: float
     quantity: int
-    price_type: TFTStockPriceType
+    price_type: StockPriceType
     in_transit_quantity: int = 0
     # time: datetime.time
     # time_cond: TimeCond

@@ -7,7 +7,7 @@ from threading import Lock
 from concurrent.futures import ThreadPoolExecutor
 import xxhash
 import shioaji as sj
-from shioaji.constant import OrderState, Exchange, Action, TFTStockPriceType
+from shioaji.constant import OrderState, Exchange, Action, StockPriceType
 
 from .data import Snapshot
 
@@ -48,7 +48,7 @@ class SimulationShioaji:
                                 quantity=trade.order.quantity,
                                 price=tick.close,
                             )
-                            self.order_callback(OrderState.TFTDeal, deal_msg)
+                            self.order_callback(OrderState.StockDeal, deal_msg)
                             pop_order_ids.append(order_id)
                     for order_id in pop_order_ids:
                         self.lmt_price_trades[tick.code].pop(order_id)
@@ -58,7 +58,7 @@ class SimulationShioaji:
     def place_order(
         self,
         contract: sj.contracts.Contract,
-        order: sj.order.TFTStockOrder,
+        order: sj.order.StockOrder,
         timeout: int = 5000,
     ):
         trade = sj.order.Trade(
@@ -164,9 +164,9 @@ class SimulationShioaji:
     def call_order_callback(self, trade: sj.order.Trade, op_type: str):
         time.sleep(0.5)
         order_msg = self.gen_order_msg(trade, op_type)
-        self.order_callback(OrderState.TFTOrder, order_msg)
+        self.order_callback(OrderState.StockOrder, order_msg)
         time.sleep(0.1)
-        if trade.order.price_type == TFTStockPriceType.MKT:
+        if trade.order.price_type == StockPriceType.MKT:
             if trade.status.status != sj.order.Status.Cancelled:
                 s = self.snapshots.get(trade.contract.code)
                 deal_msg = self.gen_deal_msg(
@@ -174,7 +174,7 @@ class SimulationShioaji:
                     quantity=trade.order.quantity,
                     price=s.price if s else trade.order.price,
                 )
-                self.order_callback(OrderState.TFTDeal, deal_msg)
+                self.order_callback(OrderState.StockDeal, deal_msg)
         else:
             if trade.status.status != sj.order.Status.Cancelled:
                 with self.lock:
