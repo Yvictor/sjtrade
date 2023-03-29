@@ -1,7 +1,7 @@
 import shioaji as sj
 from typing import Dict, Optional
 from loguru import logger
-from shioaji.constant import TFTStockPriceType
+from shioaji.constant import StockPriceType
 
 from .io.file import read_position
 from .utils import price_round, price_limit
@@ -32,7 +32,7 @@ class StrategyBase:
                 if position.status.open_quantity > 0
                 else position.contract.limit_up,
                 quantity=position.status.open_quantity * -1,
-                price_type=TFTStockPriceType.LMT,
+                price_type=StockPriceType.LMT,
             )
         ]
 
@@ -96,21 +96,21 @@ class StrategyBasic(StrategyBase):
                         PriceSet(
                             price=entry_price,
                             quantity=pos,
-                            price_type=TFTStockPriceType.LMT,
+                            price_type=StockPriceType.LMT,
                         )
                     ],
                     "stop_profit_price": [
                         PriceSet(
                             price=stop_profit_price,
                             quantity=pos,
-                            price_type=TFTStockPriceType.MKT,
+                            price_type=StockPriceType.MKT,
                         )
                     ],
                     "stop_loss_price": [
                         PriceSet(
                             price=stop_loss_price,
                             quantity=pos,
-                            price_type=TFTStockPriceType.MKT,
+                            price_type=StockPriceType.MKT,
                         )
                     ],
                 }

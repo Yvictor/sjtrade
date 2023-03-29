@@ -17,14 +17,14 @@ from sjtrade.trader import (
 )
 from shioaji.constant import (
     Action,
-    TFTStockPriceType,
-    TFTOrderType,
+    StockPriceType,
+    OrderType,
     QuoteVersion,
     Exchange,
     OrderState,
-    TFTStockOrderLot,
+    StockOrderLot,
     StockOrderCond,
-    StockFirstSell,
+    DayTrade,
 )
 
 
@@ -148,10 +148,10 @@ def test_sjtrader_place_entry_order(
                 price=41.35,
                 quantity=1,
                 action=Action.Sell,
-                price_type=TFTStockPriceType.LMT,
-                order_type=TFTOrderType.ROD,
+                price_type=StockPriceType.LMT,
+                order_type=OrderType.ROD,
                 custom_field=sjtrader.name,
-                first_sell=StockFirstSell.Yes,
+                daytrade_short=True,
             ),
             status=sj.order.OrderStatus(status=sj.order.Status.PreSubmitted),
         ),
@@ -161,9 +161,9 @@ def test_sjtrader_place_entry_order(
                 price=60.1,
                 quantity=3,
                 action=Action.Sell,
-                price_type=TFTStockPriceType.LMT,
-                order_type=TFTOrderType.ROD,
-                first_sell=StockFirstSell.Yes,
+                price_type=StockPriceType.LMT,
+                order_type=OrderType.ROD,
+                daytrade_short=True,
                 custom_field=sjtrader.name,
             ),
             status=sj.order.OrderStatus(status=sj.order.Status.PreSubmitted),
@@ -172,26 +172,26 @@ def test_sjtrader_place_entry_order(
     cond_1605 = PositionCond(
         quantity=-1,
         entry_price=[
-            PriceSet(price=41.35, quantity=-1, price_type=TFTStockPriceType.LMT, in_transit_quantity=-1)
+            PriceSet(price=41.35, quantity=-1, price_type=StockPriceType.LMT, in_transit_quantity=-1)
         ],
         stop_loss_price=[
-            PriceSet(price=42.7, quantity=-1, price_type=TFTStockPriceType.MKT)
+            PriceSet(price=42.7, quantity=-1, price_type=StockPriceType.MKT)
         ],
         stop_profit_price=[
-            PriceSet(price=35.9, quantity=-1, price_type=TFTStockPriceType.MKT)
+            PriceSet(price=35.9, quantity=-1, price_type=StockPriceType.MKT)
         ],
         cover_price=[],
     )
     cond_6290 = PositionCond(
         quantity=-3,
         entry_price=[
-            PriceSet(price=60.1, quantity=-3, price_type=TFTStockPriceType.LMT, in_transit_quantity=-3)
+            PriceSet(price=60.1, quantity=-3, price_type=StockPriceType.LMT, in_transit_quantity=-3)
         ],
         stop_loss_price=[
-            PriceSet(price=62.1, quantity=-3, price_type=TFTStockPriceType.MKT)
+            PriceSet(price=62.1, quantity=-3, price_type=StockPriceType.MKT)
         ],
         stop_profit_price=[
-            PriceSet(price=52.2, quantity=-3, price_type=TFTStockPriceType.MKT)
+            PriceSet(price=52.2, quantity=-3, price_type=StockPriceType.MKT)
         ],
         cover_price=[],
     )
@@ -266,13 +266,13 @@ def test_sjtrader_re_entry_order(
     sjtrader_entryed.re_entry_order(position, tick)
     sjtrader_entryed.api.place_order.assert_called_with(
         contract=position.contract,
-        order=sj.order.TFTStockOrder(
+        order=sj.order.StockOrder(
             price=0,
             quantity=1,
             action=Action.Sell,
-            price_type=TFTStockPriceType.MKT,
-            order_type=TFTOrderType.ROD,
-            first_sell=StockFirstSell.Yes,
+            price_type=StockPriceType.MKT,
+            order_type=OrderType.ROD,
+            daytrade_short=True,
             custom_field="dt1",
         ),
         timeout=0,
@@ -327,7 +327,7 @@ def test_sjtrader_place_cover_order(
     position.cover_trades[0].order.price == 43.3
     # TODO assert called once with
     # sjtrader_entryed.api.place_order.assert_has_calls([
-    #     ((), dict(contract=position.contract, order=sj.order.TFTStockOrder(
+    #     ((), dict(contract=position.contract, order=sj.order.StockOrder(
     #         price=0,
     #         quantity=
     #     )))
@@ -393,7 +393,7 @@ def deal_msg():
         "action": Action.Buy,
         "code": "1605",
         "order_cond": StockOrderCond.Cash,
-        "order_lot": TFTStockOrderLot.Common,
+        "order_lot": StockOrderLot.Common,
         "price": 12,
         "quantity": 10,
         "web_id": "137",
@@ -448,7 +448,7 @@ def gen_sample_deal_msg(code: str, action: Action, quantity: int):
         "action": action,
         "code": code,
         "order_cond": StockOrderCond.Cash,
-        "order_lot": TFTStockOrderLot.Common,
+        "order_lot": StockOrderLot.Common,
         "price": 12,
         "quantity": quantity,
         "web_id": "137",
@@ -461,7 +461,7 @@ def test_sjtrader_order_deal_handler_receive_order_msg(
     sjtrader_entryed: SJTrader, order_msg: dict, mocker: MockerFixture
 ):
     sjtrader_entryed.order_handler = mocker.MagicMock()
-    sjtrader_entryed.order_deal_handler(OrderState.TFTOrder, order_msg)
+    sjtrader_entryed.order_deal_handler(OrderState.StockOrder, order_msg)
     sjtrader_entryed.order_handler.assert_called_once_with(
         order_msg,
         sjtrader_entryed.positions["1605"],
@@ -472,7 +472,7 @@ def test_sjtrader_order_deal_handler_receive_deal_msg(
     sjtrader_entryed: SJTrader, deal_msg: dict, mocker: MockerFixture
 ):
     sjtrader_entryed.deal_handler = mocker.MagicMock()
-    sjtrader_entryed.order_deal_handler(OrderState.TFTDeal, deal_msg)
+    sjtrader_entryed.order_deal_handler(OrderState.StockDeal, deal_msg)
     sjtrader_entryed.deal_handler.assert_called_once_with(
         deal_msg,
         sjtrader_entryed.positions["1605"],
@@ -529,8 +529,8 @@ def test_sim_sj_quote_callback(api: sj.Shioaji):
         price=35,
         quantity=1,
         action=Action.Sell,
-        price_type=TFTStockPriceType.LMT,
-        order_type=TFTOrderType.ROD,
+        price_type=StockPriceType.LMT,
+        order_type=OrderType.ROD,
         custom_field="dt1",
     )
     sim_api.place_order(
@@ -541,8 +541,8 @@ def test_sim_sj_quote_callback(api: sj.Shioaji):
         price=34,
         quantity=1,
         action=Action.Sell,
-        price_type=TFTStockPriceType.LMT,
-        order_type=TFTOrderType.ROD,
+        price_type=StockPriceType.LMT,
+        order_type=OrderType.ROD,
         custom_field="dt1",
     )
     sim_api.place_order(
@@ -568,8 +568,8 @@ def test_sim_sj_place_order(api: sj.Shioaji):
         price=41.35,
         quantity=1,
         action=Action.Sell,
-        price_type=TFTStockPriceType.MKT,
-        order_type=TFTOrderType.ROD,
+        price_type=StockPriceType.MKT,
+        order_type=OrderType.ROD,
         custom_field="dt1",
     )
     trade = sim_api.place_order(
@@ -594,8 +594,8 @@ def test_sim_sj_cancel_order(api: sj.Shioaji):
         price=41.35,
         quantity=1,
         action=Action.Sell,
-        price_type=TFTStockPriceType.LMT,
-        order_type=TFTOrderType.ROD,
+        price_type=StockPriceType.LMT,
+        order_type=OrderType.ROD,
         custom_field="dt1",
     )
     trade = sim_api.place_order(
@@ -611,8 +611,8 @@ def test_sim_sj_cancel_order(api: sj.Shioaji):
         price=41.35,
         quantity=1,
         action=Action.Sell,
-        price_type=TFTStockPriceType.MKT,
-        order_type=TFTOrderType.ROD,
+        price_type=StockPriceType.MKT,
+        order_type=OrderType.ROD,
         custom_field="dt1",
     )
     trade = sim_api.place_order(
