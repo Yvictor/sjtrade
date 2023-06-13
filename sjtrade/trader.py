@@ -9,7 +9,7 @@ from .utils import quantity_split, sleep_until
 from .data import Snapshot
 from .simulation_shioaji import SimulationShioaji
 from .strategy import StrategyBasic
-from .position import Position, PositionCond, PriceSet
+from .position import Position, PositionCond, PriceSet, PositionStatus
 from loguru import logger
 from shioaji.constant import (
     Action,
@@ -160,7 +160,7 @@ class SJTrader:
                                 action=Action.Buy if pos > 0 else Action.Sell,
                                 price_type=price_set.price_type,
                                 order_type=OrderType.ROD,
-                                daytrade_short= False if pos > 0 else True,
+                                daytrade_short=False if pos > 0 else True,
                                 custom_field=self.name,
                             ),
                             timeout=0,
@@ -230,7 +230,9 @@ class SJTrader:
                             else Action.Sell,
                             price_type=StockPriceType.MKT,
                             order_type=OrderType.ROD,
-                            daytrade_short=False if position.cond.quantity > 0 else True,
+                            daytrade_short=False
+                            if position.cond.quantity > 0
+                            else True,
                             custom_field=self.name,
                         ),
                         timeout=0,
@@ -336,7 +338,7 @@ class SJTrader:
                     position.cover_trades.append(trade)
                     # api.update_status(trade=trade)
 
-    def open_position_cover(self, onclose: bool = True):
+    def open_position_cover(self, onclose: bool = True, fetch: bool = False):
         if self.simulation:
             api = self.simulation_api
         else:
@@ -353,7 +355,10 @@ class SJTrader:
                         sj.order.Status.PreSubmitted,
                         sj.order.Status.PartFilled,
                     ]:
+                        if not onclose and trade.order.price_type == StockPriceType.MKT:
+                            continue
                         api.cancel_order(trade, timeout=0)
+
             if position.status.entry_order_quantity and (
                 position.status.entry_order_quantity != position.status.entry_quantity
             ):
@@ -378,6 +383,23 @@ class SJTrader:
                     f"{position.status.cover_order_quantity}, position cover {position.status.cover_quantity}"
                 )
         if onclose:
+            if fetch:
+                positions = api.list_positions()
+                self.positions = [
+                    Position(
+                        contract=api.Contracts.Stocks[pos.code],
+                        cond=pos.cond,
+                        status=PositionStatus(
+                            entry_order_quantity=pos.quantity
+                            if pos.direction == Action.Buy
+                            else -pos.quantity,
+                            entry_quantity=pos.quantity
+                            if pos.direction == Action.Buy
+                            else -pos.quantity,
+                        ),
+                    )
+                    for pos in positions
+                ]
             self.positions = self.stratagy.cover_positions_onclose(self.positions)
         else:
             self.positions = self.stratagy.cover_positions(
