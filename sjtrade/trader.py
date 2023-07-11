@@ -384,22 +384,19 @@ class SJTrader:
                 )
         if onclose:
             if fetch:
-                positions = api.list_positions()
-                self.positions = [
-                    Position(
-                        contract=api.Contracts.Stocks[pos.code],
-                        cond=pos.cond,
-                        status=PositionStatus(
-                            entry_order_quantity=pos.quantity
-                            if pos.direction == Action.Buy
-                            else -pos.quantity,
-                            entry_quantity=pos.quantity
-                            if pos.direction == Action.Buy
-                            else -pos.quantity,
-                        ),
-                    )
-                    for pos in positions
-                ]
+                with logger.catch():
+                    positions = {pos.code: pos for pos in api.list_positions(timeout=10000)}
+                    for code, pos in self.positions.items():
+                        p = positions.get(code)
+                        if p:
+                            pos.status.open_quantity = p.quantity if p.direction == Action.Buy else -p.quantity
+                            # pos.status.entry_order_quantity = pos.status.entry_quantity = (
+                            #     p.quantity if p.direction == Action.Buy else -p.quantity
+                            # )
+                        else:
+                            pos.status.open_quantity = 0
+                            # pos.status.entry_order_quantity = pos.status.entry_quantity = 0
+
             self.positions = self.stratagy.cover_positions_onclose(self.positions)
         else:
             self.positions = self.stratagy.cover_positions(
