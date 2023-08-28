@@ -370,18 +370,19 @@ class SJTrader:
                     ]:
                         api.cancel_order(trade, timeout=0)
             # event wait cancel
-        for code, position in self.positions.items():
-            for _ in range(10):
-                if (
-                    position.status.cover_quantity
-                    != position.status.cover_order_quantity
-                ):
-                    time.sleep(1)
-            if position.status.cover_quantity != position.status.cover_order_quantity:
-                logger.error(
-                    f"{code} | cancel not work, position cover order "
-                    f"{position.status.cover_order_quantity}, position cover {position.status.cover_quantity}"
-                )
+        if not fetch:
+            for code, position in self.positions.items():
+                for _ in range(10):
+                    if (
+                        position.status.cover_quantity
+                        != position.status.cover_order_quantity
+                    ):
+                        time.sleep(1)
+                if position.status.cover_quantity != position.status.cover_order_quantity:
+                    logger.error(
+                        f"{code} | cancel not work, position cover order "
+                        f"{position.status.cover_order_quantity}, position cover {position.status.cover_quantity}"
+                    )
         if onclose:
             if fetch:
                 with logger.catch():
